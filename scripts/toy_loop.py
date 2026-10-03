@@ -16,7 +16,7 @@ def run(rounds: int = 10, k: int = 2, verbose: bool = True) -> dict:
         gs = tools.find_gene_set(term, 2015)["gene_set_ids"]
         tools.write_ledger("hypothesis", {
             "claim": claim, "evidence_ids": ev, "confidence": conf, "label": "agent-generated",
-            "status": "active", "gene_set_ids": gs, "parent_id": None})
+            "status": "active", "gene_set_ids": gs, "parent_id": None}, agent="insight")
     history = []
     for r in range(1, rounds + 1):
         sel = tools.planner_select_arms(k)
@@ -24,10 +24,7 @@ def run(rounds: int = 10, k: int = 2, verbose: bool = True) -> dict:
             break
         for exp_id in sel["exp_ids"]:
             res = tools.run_experiment(exp_id)
-            an = tools.analyze_result(res["res_id"])
-            tools.write_ledger("hypothesis_update", {
-                "hyp_id": an["hyp_id"], "status": "contested" if an["contested"] else "active",
-                "confidence": an["new_confidence"], "reason": f"z={an['z']}"})
+            an = tools.analyze_result(res["res_id"])  # also records the hypothesis_update
             tgt = ledger.read_eval_only(res["res_id"])  # harness only, never shown to agents
             history.append({"round": r, "exp_id": exp_id, "arm": ledger.get(exp_id)["arm_id"],
                             "z": an["z"], "contested": an["contested"],
