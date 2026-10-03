@@ -4,7 +4,7 @@ Commit this file BEFORE running the lab on real data. It is the evidence that th
 chosen from the literature, not from how well the lab ranked the target drug.
 
 Status: CHOSEN as 2015 by Thierry. Awaiting Sal's confirmation.
-Decided on (date and time): ________   Confirmed by: ________ and ________
+Decided on (date and time): 10/3/2023 Confirmed by: Salamot and ________
 
 ## Convention
 
