@@ -71,11 +71,19 @@ def pathway_enrichment(pool: list[dict], gene_set_ids: list[str], cutoff_year: i
 
 
 def literature_graph(pool: list[dict], gene_set_ids: list[str], cutoff_year: int,
-                     limit: int = 200, seed: int | None = None) -> list[dict]:
-    """Method B: co-mention strength between each drug and the hypothesis gene sets."""
+                     limit: int = 200, seed: int | None = None,
+                     include_hhv8: bool = True) -> list[dict]:
+    """Method B: co-mention strength between each drug and the hypothesis gene sets.
+
+    include_hhv8=False drops co-mentions that come from HHV-8-related records (title or
+    abstract mentions HHV-8, KSHV, Kaposi or HIV; see tools.hhv8_terms). The real loader must
+    count co-mentions only from evidence records with hhv8_related false in that case.
+    """
     _require_toy()
     _, comentions = toy_data.build()
-    scores = {p["drug_id"]: float(sum(comentions.get((p["drug_id"], gs), 0) for gs in gene_set_ids))
+    hhv8 = {} if include_hhv8 else toy_data.hhv8_comentions()
+    scores = {p["drug_id"]: float(sum(comentions.get((p["drug_id"], gs), 0)
+                                      - hhv8.get((p["drug_id"], gs), 0) for gs in gene_set_ids))
               for p in pool}
     return _rank(scores, limit, seed)
 

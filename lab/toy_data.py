@@ -43,3 +43,18 @@ def build(seed: int = 42):
     for d in drugs:  # drawn after everything else, so earlier draws are unchanged
         comentions[(d, NEGATIVE_CONTROL)] = int(rng.poisson(1.0))
     return drugs, comentions
+
+
+HHV8_SHARE = 0.3  # toy: expected share of co-mentions that come from HHV-8-related records
+
+
+@lru_cache(maxsize=1)
+def hhv8_comentions(seed: int = 43) -> dict:
+    """The part of each co-mention count that comes from HHV-8-related records.
+
+    Drawn separately (binomial share of the existing counts), so build() is unchanged and
+    method B with HHV-8 records included gives exactly the same scores as before.
+    """
+    _, comentions = build()
+    rng = np.random.default_rng(seed)
+    return {key: int(rng.binomial(n, HHV8_SHARE)) for key, n in sorted(comentions.items())}

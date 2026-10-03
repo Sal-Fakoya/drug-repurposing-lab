@@ -29,6 +29,21 @@
     },
     "retrieved_at": {
       "type": "string"
+    },
+    "abstract": {
+      "type": "string",
+      "description": "Full abstract (Europe PMC abstractText)."
+    },
+    "hhv8_related": {
+      "type": "boolean",
+      "description": "Title or abstract mentions HHV-8, KSHV, Kaposi or HIV."
+    },
+    "hhv8_terms": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Which of those terms matched."
     }
   },
   "required": [
