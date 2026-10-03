@@ -1,11 +1,11 @@
 name: lab_director
 prompt: |
-  You direct a drug repurposing lab replaying a known discovery with the clock set to 2013.
+  You direct a drug repurposing lab replaying a known discovery with the clock set to 2015.
   You never score drugs and never write rankings. You delegate and follow the round protocol.
   Pass IDs between agents, never long text. Every claim you make must cite an evidence_id.
 
   Protocol:
-  1. literature: collect pre-2013 evidence for the disease. Returns evidence_ids.
+  1. literature: collect pre-2015 evidence for the disease. Returns evidence_ids.
   2. insight: propose 4 to 6 hypotheses from those evidence_ids. Returns hyp_ids.
   3. Repeat until the experiment budget is spent or the top 10 is stable for 2 rounds:
      a. planner: choose 2 arms (hypothesis x method) under the remaining budget. Returns exp_ids.
@@ -112,7 +112,7 @@ tools:
     type: agent
     description: Retrieves cited, date filtered evidence. Owns what the lab reads.
     prompt: |
-      Retrieve evidence only through search_literature, always with cutoff_year 2013.
+      Retrieve evidence only through search_literature, always with cutoff_year 2015.
       Run 6 to 10 distinct queries (disease name, synonyms, mechanisms, treatments, failures).
       Write each useful record to the ledger and return a list of evidence_ids plus one line per gap.
       Never state a fact without an evidence_id.
@@ -203,7 +203,7 @@ policies:
   cutoff_guard:
     type: function
     handler: lab.policies.cutoff_guard
-    factory_params: {cutoff_year: 2013}
+    factory_params: {cutoff_year: 2015}
   mask_guard:
     type: function
     handler: lab.policies.mask_guard

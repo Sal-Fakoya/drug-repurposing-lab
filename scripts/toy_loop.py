@@ -9,11 +9,11 @@ from lab import ledger, tools
 
 
 def run(rounds: int = 10, k: int = 2, verbose: bool = True) -> dict:
-    ev = tools.search_literature("idiopathic multicentric castleman disease", 2013)["evidence_ids"]
+    ev = tools.search_literature("idiopathic multicentric castleman disease", 2015)["evidence_ids"]
     seeds = [("IL-6 drives the disease", "il-6", 0.7), ("mTOR signalling drives it", "mtor", 0.5),
              ("JAK signalling drives it", "jak", 0.4), ("Unmapped mechanism", "unknown", 0.3)]
     for claim, term, conf in seeds:
-        gs = tools.find_gene_set(term, 2013)["gene_set_ids"]
+        gs = tools.find_gene_set(term, 2015)["gene_set_ids"]
         tools.write_ledger("hypothesis", {
             "claim": claim, "evidence_ids": ev, "confidence": conf, "label": "agent-generated",
             "status": "active", "gene_set_ids": gs, "parent_id": None}, agent="insight")

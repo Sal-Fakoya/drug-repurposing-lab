@@ -9,3 +9,5 @@ ledger/exports/
 data/raw/
 *.sqlite
 *.db
+*.tar.gz
+data/*_records*.tsv
