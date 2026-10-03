@@ -93,3 +93,39 @@ tested next?" This frames the lab around the clinical gap in the evidence, witho
 what any individual did.
 
 
+
+## ChEMBL 19 pin (results of scripts/check_chembl.sql)
+
+- Version table: ChEMBL_19, created 2014-07-03.
+- Approved molecules (max_phase 4): 2759. With a curated mechanism target link: 1773.
+  Both counts are before merging salts and forms to the parent molecule.
+- Present and approved: sirolimus, everolimus, temsirolimus, siltuximab, tocilizumab,
+  anakinra, rituximab, thalidomide.
+- Curated targets: siltuximab -> IL6 (P05231), tocilizumab -> IL6R (P08887), anakinra -> IL1R1
+  (P14778). Sirolimus, everolimus and temsirolimus -> FKBP1A (P62942), "FK506-binding protein 1A
+  inhibitor". No mTOR (P42345) link appears in the curated mechanism or in the potent-activity
+  fallback (document year up to 2014).
+- Consequence: sirolimus can reach an mTOR hypothesis only if a gene set from the pre-cutoff
+  pathway source contains FKBP1A. Gene sets must NOT be edited by hand to create the link.
+  If no link exists, report it as a limitation of this data layer.
+- Still to fill in: MSigDB version ________; FKBP1A present in mTOR sets: ________;
+  results of scripts/check_chembl_mtor.sql: ________.
+
+## Bridge evidence (abstracts read)
+
+- Supports: sirolimus complete responses in autoimmune lymphoproliferative syndrome
+  (PMID 19208097, small series, different disease).
+- Does not support: IL-6 activating PI3K/Akt/mTOR. PMID 12242656 reports IGF-1 but not IL-6
+  increased Akt/P70S6K phosphorylation. PMID 12953803 describes IL-6 acting through JAK/STAT
+  and MAPK.
+- 114 of 144 sirolimus-lymphoproliferative records are transplant papers, so a naive
+  disease-label co-mention link would credit sirolimus for the wrong reason.
+- Expectation: sirolimus may not reach the top 10. This is an acceptable, reportable outcome.
+
+## Pre-registered evaluation (fixed before the lab runs on real data)
+
+- Primary: rank of sirolimus as the mid-rank of its tie group (scoring.log_target_rank_eval_only).
+- Secondary: best mid-rank among the rapamycin analogues (sirolimus, everolimus, temsirolimus).
+- Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
+- Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
+- Decided on ________ by ________ and ________.
