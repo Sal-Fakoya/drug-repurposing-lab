@@ -35,7 +35,13 @@ def load(name: str, year: int) -> list[dict]:
         return []
     csv.field_size_limit(10_000_000)
     with path.open(newline="") as handle:
-        return list(csv.DictReader(handle, delimiter="\t", quoting=csv.QUOTE_NONE))
+        rows = list(csv.DictReader(handle, delimiter="\t", quoting=csv.QUOTE_NONE))
+    good = [r for r in rows if r.get("pmid") and r.get("title") is not None
+            and r.get("abstract") is not None]
+    if len(good) != len(rows):
+        print(f"   note: skipped {len(rows) - len(good)} malformed row(s) in {path.name}; "
+              "re-run check_europepmc.py to regenerate")
+    return good
 
 
 def main() -> int:

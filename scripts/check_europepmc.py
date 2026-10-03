@@ -94,9 +94,14 @@ def hits(query: str) -> int:
     return int(search(dated(query), page_size=1)["hitCount"])
 
 
+def clean(text: str | None) -> str:
+    """Collapse every kind of whitespace (tabs, CR, LF, unicode separators) to single spaces."""
+    return " ".join((text or "").split())
+
+
 def rows(records: list[dict]) -> list[tuple]:
     return sorted((r.get("firstPublicationDate") or "9999", r.get("pmid") or "-",
-                   (r.get("title") or "").replace("\t", " ")) for r in records)
+                   clean(r.get("title"))) for r in records)
 
 
 def dump(name: str, query: str) -> list[tuple]:
@@ -106,9 +111,9 @@ def dump(name: str, query: str) -> list[tuple]:
     path = OUT.parent / f"{name}_{CUTOFF_YEAR}.tsv"
     lines = ["date\tpmid\ttitle\tabstract"]
     for r in ordered:
-        abstract = (r.get("abstractText") or "").replace("\t", " ").replace("\n", " ")[:6000]
+        abstract = clean(r.get("abstractText"))[:6000]
         lines.append("\t".join([r.get("firstPublicationDate") or "", r.get("pmid") or "-",
-                                 (r.get("title") or "").replace("\t", " "), abstract]))
+                                 clean(r.get("title")), abstract]))
     OUT.parent.mkdir(exist_ok=True)
     path.write_text("\n".join(lines) + "\n")
     print(f"   {len(ordered)} records saved to {path}")
