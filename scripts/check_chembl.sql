@@ -14,11 +14,12 @@ SELECT * FROM version;
 SELECT COUNT(*) AS approved_molecules FROM molecule_dictionary WHERE max_phase = 4;
 
 -- 2. Are the key drugs in the snapshot, and approved?
---    sirolimus = the target drug, siltuximab and tocilizumab = IL-6 decoys, anakinra = IL-1 route.
+--    sirolimus = the target drug, everolimus and temsirolimus = other mTOR inhibitors (ties!),
+--    siltuximab and tocilizumab = IL-6 decoys, anakinra = IL-1 route.
 SELECT molregno, chembl_id, pref_name, max_phase
 FROM molecule_dictionary
 WHERE lower(pref_name) IN ('sirolimus', 'rapamycin', 'siltuximab', 'tocilizumab', 'anakinra',
-                           'rituximab', 'thalidomide')
+                           'rituximab', 'thalidomide', 'everolimus', 'temsirolimus')
 ORDER BY pref_name;
 
 -- 3. Does this release have curated mechanisms?
@@ -34,7 +35,8 @@ JOIN drug_mechanism dm ON dm.molregno = md.molregno
 JOIN target_dictionary td ON td.tid = dm.tid
 LEFT JOIN target_components tc ON tc.tid = td.tid
 LEFT JOIN component_sequences cs ON cs.component_id = tc.component_id
-WHERE lower(md.pref_name) IN ('sirolimus', 'rapamycin', 'siltuximab', 'tocilizumab', 'anakinra')
+WHERE lower(md.pref_name) IN ('sirolimus', 'rapamycin', 'siltuximab', 'tocilizumab', 'anakinra',
+                           'everolimus', 'temsirolimus')
 ORDER BY md.pref_name;
 
 -- 5. Fallback if drug_mechanism is missing or sirolimus has no mTOR row above:
