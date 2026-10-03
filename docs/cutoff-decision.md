@@ -3,8 +3,8 @@
 Commit this file BEFORE running the lab on real data. It is the evidence that the cutoff was
 chosen from the literature, not from how well the lab ranked the target drug.
 
-Status: CHOSEN as 2015 by Thierry. Awaiting Sal's confirmation.
-Decided on (date and time): 10/3/2023 Confirmed by: Salamot and ________
+Status: CONFIRMED as 2015 by Thierry and Sal
+Decided on (date and time): 2026-10-03 16:26 CDT (UTC-05:00)   Confirmed by: Thierry Donambi and Sal Fakoya
 
 ## Convention
 
