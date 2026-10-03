@@ -10,13 +10,14 @@ requires-python = ">=3.10"
 dependencies = ["numpy", "jsonschema"]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "pyyaml"]
+dev = ["pytest", "ruff", "pyyaml", "matplotlib"]
 
 [tool.setuptools.packages.find]
 include = ["lab*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # lets tests import the experiments package
 
 [tool.ruff]
 line-length = 100

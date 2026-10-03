@@ -6,6 +6,7 @@ __pycache__/
 .ruff_cache/
 ledger/runtime/
 ledger/exports/
+experiments/out/
 data/raw/
 *.sqlite
 *.db

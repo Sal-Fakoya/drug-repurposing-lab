@@ -94,6 +94,44 @@ def _set_z(ranked: list[dict], pool: list[dict], gene_set_id: str, k: int) -> fl
     return 0.0 if var <= 0 else (observed - expected) / math.sqrt(var)
 
 
+def literature_cooccurrence(pool: list[dict], cutoff_year: int, seed: int | None = None,
+                            limit: int = 200) -> list[dict]:
+    """Baseline: rank drugs by how often they co-occur with the disease in pre-cutoff literature.
+
+    Toy mode uses each drug's total co-mention count over the hypothesis gene sets as its
+    literature volume. Real mode needs drug-disease co-occurrence counts from the dated Europe
+    PMC snapshot (Thierry's loader); until then it raises like the other loaders.
+    """
+    _require_toy()
+    _, comentions = toy_data.build()
+    scores = {p["drug_id"]: float(sum(comentions.get((p["drug_id"], gs), 0)
+                                      for gs in toy_data._HYPOTHESIS_SETS)) for p in pool}
+    return _rank(scores, limit, seed)
+
+
+def borda(results: list[tuple[list[dict], float]], seed: int | None = None,
+          limit: int = 200) -> list[dict]:
+    """Confidence-weighted Borda count: sum(weight * (N - rank + 1) / N) over ranked lists."""
+    scores: dict[str, float] = {}
+    for ranked, weight in results:
+        n = len(ranked)
+        for r in ranked:
+            scores[r["drug_id"]] = scores.get(r["drug_id"], 0.0) + weight * (n - r["rank"] + 1) / n
+    return _rank(scores, limit, seed)
+
+
+def target_mid_rank(ranked: list[dict], drug_id: str, pool_size: int) -> float:
+    """mid_rank, but a drug missing from the list ties with every other unranked drug.
+
+    An empty ranking therefore gives (pool_size + 1) / 2: every drug tied.
+    """
+    rank = mid_rank(ranked, drug_id)
+    if rank is not None:
+        return rank
+    unranked = pool_size - len(ranked)
+    return len(ranked) + (unranked + 1) / 2
+
+
 def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> float:
     """Enrichment of the hypothesis gene sets in the top k, combined across sets (Stouffer).
 
