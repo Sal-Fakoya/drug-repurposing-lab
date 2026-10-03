@@ -3,7 +3,7 @@
 # Drug Repurposing Lab
 
 An agentic lab built with Omnigent for Hack-Nation Challenge 03. It replays a known discovery
-(iMCD and sirolimus) with the clock set to 2013 and measures how fast an adaptive agent loop
+(iMCD and sirolimus) with the clock set to 2015 and measures how fast an adaptive agent loop
 ranks the known drug compared with baselines.
 
 > Agent-generated hypotheses. Not medical advice. Needs laboratory and clinical validation.
@@ -54,7 +54,7 @@ data loaders (not written yet), and the Omnigent behaviors listed in `agents/REA
 
 ## Cutoff convention
 
-`CUTOFF_YEAR=2013` is exclusive: evidence must be published before 1 January 2013 (dated up to 2012-12-31). Every source is pinned to that line or listed in `LIMITATIONS.md`.
+`CUTOFF_YEAR=2015` is exclusive: evidence must be published before 1 January 2015 (dated up to 2014-12-31). Every source is pinned to that line or listed in `LIMITATIONS.md`.
 
 ## Where to start
 

@@ -3,7 +3,7 @@
 Fill in during the build. Required for submission.
 
 ## Leakage controls
-- Date filter on all literature retrieval, cutoff 2013 (enforced by policy and by the tool).
+- Date filter on all literature retrieval, cutoff 2015 (enforced by policy and by the tool).
 - Drug and disease names masked in scoring (enforced by policy, test in tests/).
 - Rankings come only from computed scores, never from the LLM.
 - Planner reward is label-free. The target drug rank is evaluation only.

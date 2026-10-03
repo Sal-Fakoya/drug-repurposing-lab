@@ -58,7 +58,7 @@ def literature_graph(pool: list[dict], gene_set_ids: list[str], cutoff_year: int
 
 def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> float:
     """z-score of hypothesis-consistent drugs in the top k versus chance (hypergeometric)."""
-    pool = masked_drug_pool(2013)
+    pool = masked_drug_pool(2015)
     genes = _gene_union(gene_set_ids)
     hit = {p["drug_id"] for p in pool if genes & set(p["targets"])}
     n, big_k = len(pool), len(hit)
