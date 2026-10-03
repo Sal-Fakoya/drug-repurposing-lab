@@ -8,11 +8,21 @@ SUB = {n: t for n, t in SPEC["tools"].items() if t.get("type") == "agent"}
 
 
 def allowed(name):
-    return {k for k, v in SUB[name]["tools"].items() if v == "inherit"}
+    return set(SUB[name]["tools"])
 
 
 def test_six_sub_agents():
     assert set(SUB) == {"literature", "insight", "planner", "runner", "analysis", "safety"}
+
+
+def test_every_sub_agent_has_tools():
+    assert all(allowed(n) for n in SUB)
+
+
+def test_no_sub_agent_tool_uses_inherit():
+    # Omnigent 0.16 silently drops `inherit` for type: agent sub-agents, leaving them no tools.
+    # Sub-agent tools must alias the full top-level definition (`name: *name`) instead.
+    assert not [(n, k) for n, t in SUB.items() for k, v in t["tools"].items() if v == "inherit"]
 
 
 def test_no_agent_has_shell_or_file_access():

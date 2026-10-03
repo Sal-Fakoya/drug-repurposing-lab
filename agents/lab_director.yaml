@@ -37,7 +37,7 @@ cancellable: true
 
 tools:
   # ---------- function tools (Python) ----------
-  search_literature:
+  search_literature: &search_literature
     type: function
     description: Search Europe PMC. cutoff_year is mandatory. Returns evidence_ids.
     callable: lab.tools.search_literature
@@ -47,7 +47,7 @@ tools:
         query: {type: string}
         cutoff_year: {type: integer}
       required: [query, cutoff_year]
-  read_evidence:
+  read_evidence: &read_evidence
     type: function
     description: Read one evidence record by evidence_id.
     callable: lab.tools.read_evidence
@@ -55,7 +55,7 @@ tools:
       type: object
       properties: {evidence_id: {type: string}}
       required: [evidence_id]
-  find_gene_set:
+  find_gene_set: &find_gene_set
     type: function
     description: Resolve a pathway or process term to gene_set_ids, using dated sources.
     callable: lab.tools.find_gene_set
@@ -65,7 +65,7 @@ tools:
         term: {type: string}
         cutoff_year: {type: integer}
       required: [term, cutoff_year]
-  planner_select_arms:
+  planner_select_arms: &planner_select_arms
     type: function
     description: Thompson sampling over active arms under the remaining budget. Returns exp_ids.
     callable: lab.tools.planner_select_arms
@@ -73,7 +73,7 @@ tools:
       type: object
       properties: {k: {type: integer}}
       required: [k]
-  run_experiment:
+  run_experiment: &run_experiment
     type: function
     description: Run one experiment spec (masked scoring). Returns a res_id. Never returns names.
     callable: lab.tools.run_experiment
@@ -81,7 +81,7 @@ tools:
       type: object
       properties: {exp_id: {type: string}}
       required: [exp_id]
-  analyze_result:
+  analyze_result: &analyze_result
     type: function
     description: Compute prediction error, label-free reward and contested flag for a res_id, and record the hypothesis_update.
     callable: lab.tools.analyze_result
@@ -89,7 +89,7 @@ tools:
       type: object
       properties: {res_id: {type: string}}
       required: [res_id]
-  write_ledger:
+  write_ledger: &write_ledger
     type: function
     description: Validate a JSON object against its contract schema and append it. Returns its id.
     callable: lab.tools.write_ledger
@@ -100,7 +100,7 @@ tools:
         payload: {type: object}
         agent: {type: string, description: Name of the sub-agent writing the row.}
       required: [kind, payload]
-  read_ledger:
+  read_ledger: &read_ledger
     type: function
     description: Read ledger objects by id. Cannot read evaluation only columns.
     callable: lab.tools.read_ledger
@@ -108,7 +108,7 @@ tools:
       type: object
       properties: {ids: {type: array, items: {type: string}}}
       required: [ids]
-  publish_final_ranking:
+  publish_final_ranking: &publish_final_ranking
     type: function
     description: Publish the final ranked list. Consequential. Requires human approval.
     callable: lab.tools.publish_final_ranking
@@ -129,9 +129,9 @@ tools:
       Whenever you call write_ledger, pass agent "literature".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      search_literature: inherit
-      read_evidence: inherit
-      write_ledger: inherit
+      search_literature: *search_literature
+      read_evidence: *read_evidence
+      write_ledger: *write_ledger
     max_sessions: 2
 
   insight:
@@ -147,10 +147,10 @@ tools:
       Whenever you call write_ledger, pass agent "insight".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_evidence: inherit
-      read_ledger: inherit
-      find_gene_set: inherit
-      write_ledger: inherit
+      read_evidence: *read_evidence
+      read_ledger: *read_ledger
+      find_gene_set: *find_gene_set
+      write_ledger: *write_ledger
 
   planner:
     type: agent
@@ -165,9 +165,9 @@ tools:
       Whenever you call write_ledger, pass agent "planner".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_ledger: inherit
-      planner_select_arms: inherit
-      write_ledger: inherit
+      read_ledger: *read_ledger
+      planner_select_arms: *planner_select_arms
+      write_ledger: *write_ledger
 
   runner:
     type: agent
@@ -178,9 +178,9 @@ tools:
       Whenever you call write_ledger, pass agent "runner".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_ledger: inherit
-      run_experiment: inherit
-      write_ledger: inherit
+      read_ledger: *read_ledger
+      run_experiment: *run_experiment
+      write_ledger: *write_ledger
     max_sessions: 2        # lets two arms run in parallel
 
   analysis:
@@ -196,9 +196,9 @@ tools:
       Whenever you call write_ledger, pass agent "analysis".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_ledger: inherit
-      analyze_result: inherit
-      write_ledger: inherit
+      read_ledger: *read_ledger
+      analyze_result: *analyze_result
+      write_ledger: *write_ledger
 
   safety:
     type: agent
@@ -211,9 +211,9 @@ tools:
       Whenever you call write_ledger, pass agent "safety".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_ledger: inherit
-      publish_final_ranking: inherit
-      write_ledger: inherit
+      read_ledger: *read_ledger
+      publish_final_ranking: *publish_final_ranking
+      write_ledger: *write_ledger
 
 policies:
   cutoff_guard:
