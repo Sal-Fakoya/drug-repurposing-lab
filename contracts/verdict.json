@@ -27,6 +27,29 @@
     },
     "uncertainty": {
       "type": "string"
+    },
+    "predicted_direction": {
+      "enum": [
+        "enriched",
+        "not_enriched"
+      ],
+      "description": "What methods A and B should measure for the hypothesis's gene sets."
+    },
+    "z": {
+      "type": "number"
+    },
+    "prior_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "new_confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "update_id": {
+      "type": "string"
     }
   },
   "required": [

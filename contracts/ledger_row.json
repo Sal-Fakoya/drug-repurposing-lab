@@ -26,6 +26,16 @@
     },
     "payload": {
       "type": "object"
+    },
+    "synthetic": {
+      "type": "boolean",
+      "description": "True when written in toy mode."
+    },
+    "labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

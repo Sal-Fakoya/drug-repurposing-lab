@@ -13,6 +13,9 @@ from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
+import lab
+from lab import toy_data
+
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACTS = ROOT / "contracts"
 RUNTIME = Path(os.environ.get("LAB_RUNTIME_DIR", ROOT / "ledger" / "runtime"))
@@ -26,7 +29,13 @@ PREFIX = {
     "verdict": "ver",
     "safety_review": "saf",
     "approval": "apr",
+    "experiment_update": "expu",
+    "final_ranking": "fin",
 }
+# Kinds not authored by an agent: literature records, deterministic results, human approvals and
+# status bookkeeping. Every other kind is labelled "agent-generated".
+NOT_AGENT_GENERATED = {"evidence_record", "result", "approval", "experiment_update"}
+CONTROL_HYP_ID = "negative_control"  # pseudo-hypothesis for the negative-control arms
 METHOD_COST = {"A": 1.0, "B": 2.0}
 MAX_RUNS_PER_ARM = 1  # scoring is deterministic, so a re-run teaches nothing
 EVAL_ONLY_KEYS = {"target_drug_rank"}
@@ -71,8 +80,19 @@ def _strip(obj):
     return obj
 
 
+def labels_for(kind: str) -> list[str]:
+    """Labels added to every row automatically, from its kind and the lab mode."""
+    out = [] if kind in NOT_AGENT_GENERATED else ["agent-generated"]
+    if lab.MODE == "toy":
+        out.append("synthetic")
+    return out
+
+
 def append(kind: str, payload: dict, agent: str | None = None, parent_id: str | None = None) -> str:
-    """Validate and store a payload. Returns its id. Raises ValueError on a schema violation."""
+    """Validate and store a payload. Returns its id. Raises ValueError on a schema violation.
+
+    Rows carry `synthetic` (true in toy mode) and `labels` (see labels_for) automatically.
+    """
     if kind not in PREFIX:
         raise ValueError(f"Unknown ledger kind: {kind}. Allowed: {sorted(PREFIX)}")
     errors = sorted(_validator(kind).iter_errors(payload), key=lambda e: list(e.path))
@@ -93,8 +113,13 @@ def append(kind: str, payload: dict, agent: str | None = None, parent_id: str | 
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "agent": agent,
             "parent_id": parent_id,
+            "synthetic": lab.MODE == "toy",
+            "labels": labels_for(kind),
             "payload": payload,
         }
+        envelope_errors = list(_validator("ledger_row").iter_errors(row))
+        if envelope_errors:
+            raise ValueError(f"Schema violation for ledger row: {envelope_errors[0].message}")
         with _file("ledger.jsonl").open("a") as handle:
             handle.write(json.dumps(row) + "\n")
     return row_id
@@ -108,7 +133,7 @@ def _find(row_id: str) -> dict:
 
 
 def get(row_id: str) -> dict:
-    """Return a payload with its id, with the latest hypothesis state applied."""
+    """Return a payload with its id, with the latest hypothesis or experiment state applied."""
     row = _find(row_id)
     data = {"id": row["id"], "kind": row["kind"], **row["payload"]}
     if row["kind"] == "hypothesis":
@@ -117,7 +142,42 @@ def get(row_id: str) -> dict:
                 data["status"] = upd["payload"]["status"]
                 if "confidence" in upd["payload"]:
                     data["confidence"] = upd["payload"]["confidence"]
+    if row["kind"] == "experiment_spec":
+        data["status"] = spec_status(row_id)
     return _strip(data)
+
+
+def spec_status(exp_id: str) -> str:
+    """planned, run (a result exists) or superseded (an experiment_update says so)."""
+    status = _find(exp_id)["payload"].get("status", "planned")
+    for row in _rows():
+        if row["kind"] == "result" and row["payload"]["exp_id"] == exp_id:
+            return "run"
+        if row["kind"] == "experiment_update" and row["payload"]["exp_id"] == exp_id:
+            status = row["payload"]["status"]
+    return status
+
+
+def design_key(hyp_id: str, method: str, params: dict) -> str:
+    """Identity of an experiment design: same hypothesis, method and parameters."""
+    return json.dumps([hyp_id, method, params], sort_keys=True)
+
+
+def run_designs() -> set[str]:
+    """Design keys of every experiment that has a result."""
+    specs = {row["id"]: row["payload"] for row in rows_of_kind("experiment_spec")}
+    return {design_key(specs[e]["hyp_id"], specs[e]["method"], specs[e]["params"])
+            for e in (row["payload"]["exp_id"] for row in rows_of_kind("result")) if e in specs}
+
+
+def planned_specs() -> list[str]:
+    """Ids of specs that are still planned (neither run nor superseded)."""
+    return [row["id"] for row in rows_of_kind("experiment_spec")
+            if spec_status(row["id"]) == "planned"]
+
+
+def _testable(hyp: dict) -> bool:
+    return hyp.get("testable", True) is not False and bool(hyp.get("gene_set_ids"))
 
 
 def rows_of_kind(kind: str) -> list[dict]:
@@ -139,22 +199,38 @@ def _stats() -> dict:
     return json.loads(path.read_text())
 
 
+def arm_stats() -> dict:
+    """Per-arm reward history: {arm_id: {"n": ..., "mean_reward": ...}}."""
+    return _stats()["arms"]
+
+
 def active_arms() -> list[dict]:
-    """Every active hypothesis paired with each method. Reward history comes from arm stats."""
+    """Untested arms: each active, testable hypothesis x method, plus the negative control.
+
+    An arm is dropped once its design (hypothesis, method, params) has been run, whatever
+    spec id or arm id ran it. The negative-control arms are offered only while some testable
+    hypothesis is active. Reward history comes from arm stats.
+    """
     stats = _stats()["arms"]
-    arms = []
+    done = run_designs()
+    candidates = []
     for hyp in hypotheses():
-        if hyp["status"] != "active":
-            continue
+        if hyp["status"] == "active" and _testable(hyp):
+            candidates.append((hyp["id"], hyp["gene_set_ids"], False))
+    if candidates:
+        candidates.append((CONTROL_HYP_ID, [toy_data.NEGATIVE_CONTROL], True))
+    arms = []
+    for hyp_id, gene_set_ids, control in candidates:
         for method, cost in METHOD_COST.items():
-            arm_id = f"{hyp['id']}:{method}"
+            arm_id = f"{hyp_id}:{method}"
+            params = {"gene_set_ids": gene_set_ids}
             s = stats.get(arm_id, {"n": 0, "mean_reward": 1.0})  # optimistic prior
-            if s["n"] >= MAX_RUNS_PER_ARM:
+            if s["n"] >= MAX_RUNS_PER_ARM or design_key(hyp_id, method, params) in done:
                 continue
             arms.append({
-                "arm_id": arm_id, "hyp_id": hyp["id"], "method": method, "cost": cost,
+                "arm_id": arm_id, "hyp_id": hyp_id, "method": method, "cost": cost,
                 "n": s["n"], "mean_reward": s["mean_reward"], "feasibility": 1.0,
-                "params": {"gene_set_ids": hyp["gene_set_ids"]},
+                "params": params, "control": control,
             })
     return arms
 
