@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Experiment spec",
+  "type": "object",
+  "properties": {
+    "hyp_id": {
+      "type": "string"
+    },
+    "method": {
+      "enum": [
+        "A",
+        "B"
+      ]
+    },
+    "arm_id": {
+      "type": "string"
+    },
+    "params": {
+      "type": "object"
+    },
+    "expected_cost": {
+      "type": "number"
+    },
+    "expected_learning": {
+      "type": "number"
+    },
+    "feasibility": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "hyp_id",
+    "method",
+    "arm_id",
+    "params",
+    "expected_cost",
+    "expected_learning",
+    "feasibility"
+  ],
+  "additionalProperties": false
+}

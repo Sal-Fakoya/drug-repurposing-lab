@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Safety review",
+  "type": "object",
+  "properties": {
+    "res_id": {
+      "type": "string"
+    },
+    "checks": {
+      "type": "object"
+    },
+    "passed": {
+      "type": "boolean"
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "res_id",
+    "checks",
+    "passed"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Result",
+  "type": "object",
+  "properties": {
+    "exp_id": {
+      "type": "string"
+    },
+    "ranked_drugs": {
+      "type": "array",
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Ranked drug",
+        "type": "object",
+        "properties": {
+          "drug_id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "drug_id",
+          "score",
+          "rank"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "cost": {
+      "type": "number"
+    },
+    "seed": {
+      "type": "integer"
+    },
+    "artifact_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "exp_id",
+    "ranked_drugs",
+    "cost",
+    "seed"
+  ],
+  "additionalProperties": false
+}

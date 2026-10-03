@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verdict",
+  "type": "object",
+  "properties": {
+    "res_id": {
+      "type": "string"
+    },
+    "hyp_id": {
+      "type": "string"
+    },
+    "verdict": {
+      "enum": [
+        "supported",
+        "weakened",
+        "contested"
+      ]
+    },
+    "explanation": {
+      "type": "string"
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "uncertainty": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "res_id",
+    "hyp_id",
+    "verdict",
+    "explanation",
+    "evidence_ids",
+    "uncertainty"
+  ],
+  "additionalProperties": false
+}

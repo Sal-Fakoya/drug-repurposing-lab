@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hypothesis update",
+  "type": "object",
+  "properties": {
+    "hyp_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "active",
+        "contested",
+        "retired"
+      ]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "hyp_id",
+    "status"
+  ],
+  "additionalProperties": false
+}

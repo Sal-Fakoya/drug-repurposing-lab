@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Evidence record",
+  "type": "object",
+  "properties": {
+    "source": {
+      "type": "string"
+    },
+    "pmid": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "pub_date": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "snippet": {
+      "type": "string"
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "retrieved_at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "pub_date",
+    "title",
+    "snippet",
+    "entities",
+    "retrieved_at"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lab"
+version = "0.1.0"
+description = "Drug repurposing lab: tools, scoring, ledger and policies for Omnigent agents"
+requires-python = ">=3.10"
+dependencies = ["numpy", "jsonschema"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "pyyaml"]
+
+[tool.setuptools.packages.find]
+include = ["lab*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100

@@ -1,0 +1,223 @@
+name: lab_director
+prompt: |
+  You direct a drug repurposing lab replaying a known discovery with the clock set to 2013.
+  You never score drugs and never write rankings. You delegate and follow the round protocol.
+  Pass IDs between agents, never long text. Every claim you make must cite an evidence_id.
+
+  Protocol:
+  1. literature: collect pre-2013 evidence for the disease. Returns evidence_ids.
+  2. insight: propose 4 to 6 hypotheses from those evidence_ids. Returns hyp_ids.
+  3. Repeat until the experiment budget is spent or the top 10 is stable for 2 rounds:
+     a. planner: choose 2 arms (hypothesis x method) under the remaining budget. Returns exp_ids.
+     b. runner: run both arms in parallel. Returns res_ids.
+     c. analysis: interpret each result, decide contested or supported. Returns verdicts.
+     d. If any hypothesis is contested, call insight with the contradicting res_id to revise.
+  4. safety: review the final ranking and request human approval before anything is published.
+  Label every hypothesis agent-generated. Preserve uncertainty. Never give treatment advice.
+
+executor:
+  harness: claude-sdk
+  model: databricks-claude-sonnet-4-6      # confirm this id exists in your workspace
+  auth:
+    type: databricks
+    profile: oss                           # your Databricks profile
+
+async: true
+cancellable: true
+
+tools:
+  # ---------- function tools (Python) ----------
+  search_literature:
+    type: function
+    description: Search Europe PMC. cutoff_year is mandatory. Returns evidence_ids.
+    callable: lab.tools.search_literature
+    parameters:
+      type: object
+      properties:
+        query: {type: string}
+        cutoff_year: {type: integer}
+      required: [query, cutoff_year]
+  read_evidence:
+    type: function
+    description: Read one evidence record by evidence_id.
+    callable: lab.tools.read_evidence
+    parameters:
+      type: object
+      properties: {evidence_id: {type: string}}
+      required: [evidence_id]
+  find_gene_set:
+    type: function
+    description: Resolve a pathway or process term to gene_set_ids, using dated sources.
+    callable: lab.tools.find_gene_set
+    parameters:
+      type: object
+      properties:
+        term: {type: string}
+        cutoff_year: {type: integer}
+      required: [term, cutoff_year]
+  planner_select_arms:
+    type: function
+    description: Thompson sampling over active arms under the remaining budget. Returns exp_ids.
+    callable: lab.tools.planner_select_arms
+    parameters:
+      type: object
+      properties: {k: {type: integer}}
+      required: [k]
+  run_experiment:
+    type: function
+    description: Run one experiment spec (masked scoring). Returns a res_id. Never returns names.
+    callable: lab.tools.run_experiment
+    parameters:
+      type: object
+      properties: {exp_id: {type: string}}
+      required: [exp_id]
+  analyze_result:
+    type: function
+    description: Compute prediction error, label-free reward and contested flag for a res_id.
+    callable: lab.tools.analyze_result
+    parameters:
+      type: object
+      properties: {res_id: {type: string}}
+      required: [res_id]
+  write_ledger:
+    type: function
+    description: Validate a JSON object against its contract schema and append it. Returns its id.
+    callable: lab.tools.write_ledger
+    parameters:
+      type: object
+      properties:
+        kind: {type: string}
+        payload: {type: object}
+      required: [kind, payload]
+  read_ledger:
+    type: function
+    description: Read ledger objects by id. Cannot read evaluation only columns.
+    callable: lab.tools.read_ledger
+    parameters:
+      type: object
+      properties: {ids: {type: array, items: {type: string}}}
+      required: [ids]
+  publish_final_ranking:
+    type: function
+    description: Publish the final ranked list. Consequential. Requires human approval.
+    callable: lab.tools.publish_final_ranking
+    parameters:
+      type: object
+      properties: {res_id: {type: string}}
+      required: [res_id]
+
+  # ---------- sub-agents ----------
+  literature:
+    type: agent
+    description: Retrieves cited, date filtered evidence. Owns what the lab reads.
+    prompt: |
+      Retrieve evidence only through search_literature, always with cutoff_year 2013.
+      Run 6 to 10 distinct queries (disease name, synonyms, mechanisms, treatments, failures).
+      Write each useful record to the ledger and return a list of evidence_ids plus one line per gap.
+      Never state a fact without an evidence_id.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      search_literature: inherit
+      read_evidence: inherit
+      write_ledger: inherit
+    max_sessions: 2
+
+  insight:
+    type: agent
+    description: Proposes labeled mechanism hypotheses grounded in evidence_ids. Owns what we believe.
+    prompt: |
+      Propose 4 to 6 competing mechanism hypotheses. Each needs: claim, supporting evidence_ids,
+      confidence 0 to 1, gene_set_ids (use find_gene_set), label "agent-generated", status "active".
+      Include at least one hypothesis that contradicts the leading one.
+      Use only evidence you can read with read_evidence. If asked to revise after a contested result,
+      read that res_id, record the change with write_ledger kind "hypothesis_update" (hyp_id, status, confidence), and add a new hypothesis that explains the contradiction.
+      Write each hypothesis with write_ledger kind "hypothesis" and return hyp_ids.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      read_evidence: inherit
+      read_ledger: inherit
+      find_gene_set: inherit
+      write_ledger: inherit
+
+  planner:
+    type: agent
+    description: Chooses which experiments to run next under a budget. Owns what we test.
+    prompt: |
+      For every active hypothesis there are two methods, A (pathway enrichment) and B (literature graph).
+      Call planner_select_arms with k=2. It samples arms by Thompson sampling on past label-free reward
+      and cost, within the remaining budget. You may override one arm only with a written reason
+      (for example to test a contradicting hypothesis). Write each experiment spec with write_ledger
+      kind "experiment_spec" including expected_cost, expected_learning, feasibility. Return exp_ids.
+      You never see drug names, drug rankings, or the target drug's rank.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      read_ledger: inherit
+      planner_select_arms: inherit
+      write_ledger: inherit
+
+  runner:
+    type: agent
+    description: Executes experiment specs. No external access beyond run_experiment.
+    prompt: |
+      For each exp_id, call run_experiment exactly once and return the res_id. Do not interpret results.
+      If a run fails, report the error text and stop. Never retry with changed parameters.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      read_ledger: inherit
+      run_experiment: inherit
+      write_ledger: inherit
+    max_sessions: 2        # lets two arms run in parallel
+
+  analysis:
+    type: agent
+    description: Interprets results, updates beliefs, reopens assumptions. Owns what we learned.
+    prompt: |
+      For each res_id call analyze_result, then read the linked hypothesis and result.
+      Decide: supported, weakened, or contested. A result is contested when the hypothesis predicted
+      enrichment and the measured enrichment is absent or reversed (analyze_result gives the numbers).
+      Explain in 3 sentences that cite evidence_ids and res_ids. State uncertainty explicitly.
+      Write a "verdict" object with write_ledger, then write a "hypothesis_update" (hyp_id, status
+      "active" or "contested", confidence from new_confidence). Return verdicts. Never rank drugs yourself.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      read_ledger: inherit
+      analyze_result: inherit
+      write_ledger: inherit
+
+  safety:
+    type: agent
+    description: Reviews outputs for treatment-like claims and gates publication on human approval.
+    prompt: |
+      Read the final ranking and every verdict. Check: every claim cites evidence, every hypothesis is
+      labeled agent-generated, no dosing or treatment advice, limitations stated, validation needed
+      before real-world use. Write a "safety_review" object. Then call publish_final_ranking.
+      That call pauses for a human decision. If refused, report why and stop.
+    executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
+    tools:
+      read_ledger: inherit
+      publish_final_ranking: inherit
+      write_ledger: inherit
+
+policies:
+  cutoff_guard:
+    type: function
+    handler: lab.policies.cutoff_guard
+    factory_params: {cutoff_year: 2013}
+  mask_guard:
+    type: function
+    handler: lab.policies.mask_guard
+    factory_params:
+      scoring_tools: [planner_select_arms, run_experiment, analyze_result]
+      blocked_terms: [sirolimus, rapamycin, castleman, imcd, siltuximab, tocilizumab]
+  approval_gate:
+    type: function
+    handler: lab.policies.approval_gate
+    factory_params: {gated_tools: [publish_final_ranking]}
+  tool_call_cap:
+    type: function
+    handler: omnigent.policies.builtins.safety.max_tool_calls_per_session
+    factory_params: {limit: 300}
+  budget:
+    type: function
+    handler: omnigent.policies.builtins.cost.cost_budget
+    factory_params: {max_cost_usd: 10.00, ask_thresholds_usd: [5.00]}
