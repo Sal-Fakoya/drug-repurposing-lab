@@ -73,7 +73,7 @@ tools:
       required: [exp_id]
   analyze_result:
     type: function
-    description: Compute prediction error, label-free reward and contested flag for a res_id.
+    description: Compute prediction error, label-free reward and contested flag for a res_id, and record the hypothesis_update.
     callable: lab.tools.analyze_result
     parameters:
       type: object
@@ -88,6 +88,7 @@ tools:
       properties:
         kind: {type: string}
         payload: {type: object}
+        agent: {type: string, description: Name of the sub-agent writing the row.}
       required: [kind, payload]
   read_ledger:
     type: function
@@ -176,8 +177,8 @@ tools:
       Decide: supported, weakened, or contested. A result is contested when the hypothesis predicted
       enrichment and the measured enrichment is absent or reversed (analyze_result gives the numbers).
       Explain in 3 sentences that cite evidence_ids and res_ids. State uncertainty explicitly.
-      Write a "verdict" object with write_ledger, then write a "hypothesis_update" (hyp_id, status
-      "active" or "contested", confidence from new_confidence). Return verdicts. Never rank drugs yourself.
+      Write a "verdict" object with write_ledger (agent "analysis"). analyze_result already records
+      the hypothesis_update (update_id), so do not write another. Return verdicts. Never rank drugs yourself.
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
       read_ledger: inherit
