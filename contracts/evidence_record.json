@@ -34,16 +34,20 @@
       "type": "string",
       "description": "Full abstract (Europe PMC abstractText)."
     },
-    "hhv8_related": {
-      "type": "boolean",
-      "description": "Title or abstract mentions HHV-8, KSHV, Kaposi or HIV."
+    "hhv8_status": {
+      "enum": [
+        "positive",
+        "negated_only",
+        "none"
+      ],
+      "description": "positive: HHV-8, KSHV, Kaposi or HIV discussed as present or causal; negated_only: every mention is a negation (e.g. HHV-8-negative); none: no mention. See lab/hhv8.py."
     },
     "hhv8_terms": {
       "type": "array",
       "items": {
         "type": "string"
       },
-      "description": "Which of those terms matched."
+      "description": "Every term mentioned, negated or not."
     }
   },
   "required": [

@@ -7,7 +7,7 @@ import urllib.parse
 import pytest
 
 import lab
-from lab import ledger, scoring, tools, toy_data
+from lab import hhv8, ledger, scoring, tools, toy_data
 
 LEAKY_FIELDS = {"citedByCount": 412, "meshHeadingList": {"meshHeading": []},
                 "authorString": "Doe J.", "journalInfo": {"journal": {"title": "J"}},
@@ -99,7 +99,7 @@ def test_keeps_only_title_abstract_and_first_publication_date(real_mode, monkeyp
                                None)})
     ev = ledger.get(tools.search_literature("castleman", 2015)["evidence_ids"][0])
     assert set(ev) == {"id", "kind", "source", "pmid", "pub_date", "title", "abstract", "snippet",
-                       "entities", "retrieved_at", "hhv8_related", "hhv8_terms"}
+                       "entities", "retrieved_at", "hhv8_status", "hhv8_terms"}
     assert (ev["title"], ev["abstract"], ev["pub_date"]) == ("T", long_abstract, "2012-03-04")
     assert ev["snippet"] == long_abstract[:600] and ev["entities"] == []
     assert not set(LEAKY_FIELDS) & set(ev)
@@ -128,32 +128,82 @@ def test_records_are_written_by_the_literature_agent_and_not_synthetic(real_mode
     assert row["agent"] == "literature" and row["synthetic"] is False
 
 
-# ---------- HHV-8 tagging ----------
+# ---------- HHV-8 status ----------
+
+NEGATIONS = [  # every negation form the status rule accepts
+    ("HHV-8-negative", ["HHV-8"]),
+    ("HHV-8 negative", ["HHV-8"]),
+    ("negative for HHV-8", ["HHV-8"]),
+    ("HHV-8-seronegative", ["HHV-8"]),
+    ("HHV-8 seronegative", ["HHV-8"]),
+    ("HIV-negative", ["HIV"]),
+    ("HIV-1-negative", ["HIV"]),
+    ("seronegative for HHV-8/HIV", ["HHV-8", "HIV"]),
+    ("seronegative for HHV-8 and HIV", ["HHV-8", "HIV"]),
+    ("seronegative for HIV", ["HIV"]),
+    ("negative for both HHV-8 and HIV", ["HHV-8", "HIV"]),
+    ("HHV-8 and HIV negative", ["HHV-8", "HIV"]),
+    ("HHV8-negative", ["HHV-8"]),
+    ("KSHV-negative", ["KSHV"]),
+    ("Kaposi sarcoma-associated herpesvirus (KSHV)-negative", ["KSHV"]),
+    ("human herpesvirus 8 (HHV-8)-negative", ["HHV-8"]),
+]
+
+
+@pytest.mark.parametrize("phrase, terms", NEGATIONS)
+def test_each_negation_pattern_is_negated_only(phrase, terms):
+    title = f"{phrase} idiopathic multicentric Castleman disease"
+    assert hhv8.classify(title, "IL-6 was elevated.") == ("negated_only", terms)
+
+
+@pytest.mark.parametrize("phrase", [p for p, _ in NEGATIONS])
+def test_a_negation_plus_a_positive_finding_counts_as_positive(phrase):
+    status, _ = hhv8.classify(f"Patient 1 was {phrase}.",
+                              "In patient 2, HHV-8 DNA was detected and Kaposi sarcoma developed.")
+    assert status == "positive"
+
 
 @pytest.mark.parametrize("title, abstract, terms", [
     ("HHV-8-associated multicentric Castleman disease", "", ["HHV-8"]),
+    ("HHV-8-positive MCD", "", ["HHV-8"]),
     ("Castleman disease", "HHV8 DNA was detected.", ["HHV-8"]),
     ("Castleman disease", "Human herpesvirus 8 latency.", ["HHV-8"]),
     ("Castleman disease", "human herpes virus-8 serology", ["HHV-8"]),
     ("KSHV-encoded viral IL-6", "", ["KSHV"]),
     ("Castleman disease and Kaposi's sarcoma", "", ["Kaposi"]),
     ("Castleman disease", "Patients were HIV-positive.", ["HIV"]),
-    ("HHV-8-negative idiopathic MCD", "No HIV infection; KSHV LANA absent.",
-     ["HHV-8", "KSHV", "HIV"]),
-    ("Idiopathic multicentric Castleman disease", "IL-6 was elevated in an archive of hives.", []),
-    ("Castleman disease", "", []),
+    ("Castleman disease in HIV-infected patients", "", ["HIV"]),
+    # not one of the negation forms, so it stays positive (the exclusion run drops it)
+    ("Castleman disease", "There was no evidence of HHV-8.", ["HHV-8"]),
+    ("Castleman disease", "HHV-8 PCR was negative.", ["HHV-8"]),
 ])
-def test_tags_hhv8_related_records_from_title_or_abstract(real_mode, monkeypatch, title, abstract,
-                                                          terms):
-    _serve(monkeypatch, {"*": ([_rec("1", title=title, abstract=abstract)], None)})
-    ev = ledger.get(tools.search_literature("castleman", 2015)["evidence_ids"][0])
-    assert ev["hhv8_terms"] == terms and ev["hhv8_related"] is bool(terms)
+def test_present_or_causal_mentions_are_positive(title, abstract, terms):
+    assert hhv8.classify(title, abstract) == ("positive", terms)
 
 
-def test_search_reports_how_many_records_are_hhv8_related(real_mode, monkeypatch):
-    _serve(monkeypatch, {"*": ([_rec("1", title="KSHV"), _rec("2"), _rec("3", abstract="HIV")],
-                               None)})
-    assert tools.search_literature("castleman", 2015)["n_hhv8_related"] == 2
+@pytest.mark.parametrize("title, abstract", [
+    ("Idiopathic multicentric Castleman disease", "IL-6 was elevated in an archive of hives."),
+    ("Castleman disease", ""),
+    ("", ""),
+])
+def test_no_mention_is_none(title, abstract):
+    assert hhv8.classify(title, abstract) == ("none", [])
+
+
+def test_search_stores_status_and_terms_and_reports_counts(real_mode, monkeypatch):
+    _serve(monkeypatch, {"*": ([
+        _rec("1", title="KSHV-associated MCD"),
+        _rec("2", title="HHV-8-negative idiopathic MCD", abstract="HIV-negative patients."),
+        _rec("3", title="HHV-8-negative MCD", abstract="One patient developed Kaposi sarcoma."),
+        _rec("4", title="Idiopathic MCD", abstract="IL-6 blockade."),
+    ], None)})
+    out = tools.search_literature("castleman", 2015)
+    stored = [ledger.get(i) for i in out["evidence_ids"]]
+    assert [(e["hhv8_status"], e["hhv8_terms"]) for e in stored] == [
+        ("positive", ["KSHV"]), ("negated_only", ["HHV-8", "HIV"]),
+        ("positive", ["HHV-8", "Kaposi"]), ("none", [])]
+    assert out["hhv8_status_counts"] == {"positive": 2, "negated_only": 1, "none": 1}
+    assert all("hhv8_related" not in e for e in stored)
 
 
 # ---------- failures ----------
@@ -203,7 +253,7 @@ def test_method_b_default_is_unchanged_and_excluding_hhv8_only_removes_counts():
     assert with_hhv8 == default
     assert all(without[d] <= with_hhv8[d] for d in with_hhv8)
     assert any(without[d] < with_hhv8[d] for d in with_hhv8)
-    part, (_, total) = toy_data.hhv8_comentions(), toy_data.build()
+    part, (_, total) = toy_data.hhv8_positive_comentions(), toy_data.build()
     assert all(0 <= part[k] <= total[k] for k in total)
 
 

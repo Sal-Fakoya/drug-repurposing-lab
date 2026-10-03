@@ -13,7 +13,7 @@ import urllib.request
 
 import numpy as np
 
-from lab import CUTOFF_YEAR, MODE, ledger, scoring, toy_data
+from lab import CUTOFF_YEAR, MODE, hhv8, ledger, scoring, toy_data
 
 BUDGET_TOTAL = float(os.environ.get("LAB_BUDGET", "20"))
 AGENTS = {"literature", "insight", "planner", "runner", "analysis", "safety"}
@@ -28,14 +28,6 @@ EUROPEPMC_PAGE_SIZE = 100
 EUROPEPMC_MAX_RECORDS = 1000
 EUROPEPMC_RETRIES = 4
 EUROPEPMC_TIMEOUT = 60
-# A record is HHV-8-related if its title or abstract mentions any of these. Plain mentions
-# count, including negations such as "HHV-8-negative".
-HHV8_PATTERNS = {
-    "HHV-8": re.compile(r"\bHHV[- ]?8\b|\bhuman herpes ?virus[- ]?8\b", re.IGNORECASE),
-    "KSHV": re.compile(r"\bKSHV\b", re.IGNORECASE),
-    "Kaposi": re.compile(r"\bKaposi", re.IGNORECASE),
-    "HIV": re.compile(r"\bHIV\b", re.IGNORECASE),
-}
 
 
 def _now() -> str:
@@ -43,12 +35,6 @@ def _now() -> str:
 
 
 # ---------- literature ----------
-
-def hhv8_terms(*texts: str) -> list[str]:
-    """Which HHV-8 / KSHV / Kaposi / HIV terms the texts mention, in a fixed order."""
-    joined = " ".join(t for t in texts if t)
-    return [name for name, pattern in HHV8_PATTERNS.items() if pattern.search(joined)]
-
 
 def _europepmc_page(query: str, cursor: str) -> dict:
     """One page of Europe PMC results. Retries timeouts, network errors and 5xx/429."""
@@ -83,11 +69,11 @@ def _store_europepmc_record(rec: dict, cutoff_year: int) -> str | None:
         return None  # undated, malformed, or on/after the cutoff: belt and braces on the filter
     title = rec.get("title") or ""
     abstract = rec.get("abstractText") or ""
-    terms = hhv8_terms(title, abstract)
+    status, terms = hhv8.classify(title, abstract)
     return ledger.append("evidence_record", {
         "source": "europepmc", "pmid": rec.get("pmid"), "pub_date": pub, "title": title,
         "abstract": abstract, "snippet": abstract[:600], "entities": [],
-        "retrieved_at": _now(), "hhv8_related": bool(terms), "hhv8_terms": terms},
+        "retrieved_at": _now(), "hhv8_status": status, "hhv8_terms": terms},
         agent="literature")
 
 
@@ -96,8 +82,9 @@ def search_literature(query: str, cutoff_year: int,
     """Search Europe PMC with a hard publication date filter. Returns evidence_ids.
 
     Real mode pages through every hit with cursorMark (up to max_records), keeps only title,
-    abstract and first publication date, and tags HHV-8-related records. Evidence ids are
-    unique and in retrieval order; a PMID already in the ledger returns its existing id.
+    abstract and first publication date, and sets hhv8_status (positive, negated_only or none;
+    see lab/hhv8.py). Evidence ids are unique and in retrieval order; a PMID already in the
+    ledger returns its existing id.
     """
     if cutoff_year is None or int(cutoff_year) > CUTOFF_YEAR:
         raise ValueError(f"cutoff_year must be set and at most {CUTOFF_YEAR}")
@@ -112,11 +99,11 @@ def search_literature(query: str, cutoff_year: int,
         ]
         ids = []
         for pmid, title, snippet, entities in samples:
-            terms = hhv8_terms(title, snippet)
+            status, terms = hhv8.classify(title, snippet)
             ids.append(ledger.append("evidence_record", {
                 "source": "toy", "pmid": pmid, "pub_date": "2012-01-01", "title": title,
                 "abstract": snippet, "snippet": snippet, "entities": entities,
-                "retrieved_at": _now(), "hhv8_related": bool(terms), "hhv8_terms": terms},
+                "retrieved_at": _now(), "hhv8_status": status, "hhv8_terms": terms},
                 agent="literature"))
         return {"evidence_ids": ids}
     last_day = f"{int(cutoff_year) - 1}-12-31"  # cutoff_year is exclusive
@@ -135,8 +122,10 @@ def search_literature(query: str, cutoff_year: int,
         if not records or not next_cursor or next_cursor == cursor:
             break
         cursor = next_cursor
-    hhv8 = sum(1 for i in ids if ledger.get(i).get("hhv8_related"))
-    return {"evidence_ids": ids, "n_retrieved": retrieved, "n_hhv8_related": hhv8}
+    counts = dict.fromkeys(hhv8.STATUSES, 0)
+    for i in ids:
+        counts[ledger.get(i)["hhv8_status"]] += 1
+    return {"evidence_ids": ids, "n_retrieved": retrieved, "hhv8_status_counts": counts}
 
 
 def read_evidence(evidence_id: str) -> dict:

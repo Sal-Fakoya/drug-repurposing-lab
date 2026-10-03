@@ -45,12 +45,12 @@ def build(seed: int = 42):
     return drugs, comentions
 
 
-HHV8_SHARE = 0.3  # toy: expected share of co-mentions that come from HHV-8-related records
+HHV8_SHARE = 0.3  # toy: expected share of co-mentions from records with hhv8_status "positive"
 
 
 @lru_cache(maxsize=1)
-def hhv8_comentions(seed: int = 43) -> dict:
-    """The part of each co-mention count that comes from HHV-8-related records.
+def hhv8_positive_comentions(seed: int = 43) -> dict:
+    """The part of each co-mention count that comes from hhv8_status "positive" records.
 
     Drawn separately (binomial share of the existing counts), so build() is unchanged and
     method B with HHV-8 records included gives exactly the same scores as before.
