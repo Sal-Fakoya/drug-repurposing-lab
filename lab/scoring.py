@@ -80,10 +80,12 @@ def literature_graph(pool: list[dict], gene_set_ids: list[str], cutoff_year: int
     return _rank(scores, limit, seed)
 
 
-def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> float:
-    """z-score of hypothesis-consistent drugs in the top k versus chance (hypergeometric)."""
-    pool = masked_drug_pool(2015)
-    genes = _gene_union(gene_set_ids)
+Z_ENRICHED = 1.0  # z at or above this counts as "enriched". Tune in H8 to H11.
+
+
+def _set_z(ranked: list[dict], pool: list[dict], gene_set_id: str, k: int) -> float:
+    """Hypergeometric z of drugs targeting one gene set in the top k versus chance."""
+    genes = _gene_union([gene_set_id])
     hit = {p["drug_id"] for p in pool if genes & set(p["targets"])}
     n, big_k = len(pool), len(hit)
     observed = sum(1 for r in ranked[:k] if r["drug_id"] in hit)
@@ -92,9 +94,36 @@ def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> fl
     return 0.0 if var <= 0 else (observed - expected) / math.sqrt(var)
 
 
-def update_confidence(confidence: float, z: float, predicted: float) -> float:
-    support = max(0.0, min(z / predicted, 1.5)) / 1.5
-    return round(0.5 * confidence + 0.5 * support, 4)
+def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> float:
+    """Enrichment of the hypothesis gene sets in the top k, combined across sets (Stouffer).
+
+    Each gene set is tested on its own and the per-set z values are combined as sum / sqrt(m).
+    Testing the union instead counts a drug as a hit if it targets ANY of the sets, which
+    covers most of the pool once two or three sets are combined and drives z to 0 even when
+    the ranking (a sum of the single-set scores) is clearly enriched.
+    """
+    if not gene_set_ids:
+        return 0.0
+    pool = masked_drug_pool(2015)
+    zs = [_set_z(ranked, pool, gs, k) for gs in gene_set_ids]
+    return sum(zs) / math.sqrt(len(zs))
+
+
+def assess(z: float, predicted_direction: str, confidence: float) -> tuple[str, float]:
+    """Verdict and new confidence from ONE rule, so they can never disagree.
+
+    The result matches when the observed direction (z >= Z_ENRICHED is "enriched") equals the
+    hypothesis's own prediction. A match is "supported" and moves confidence up; a mismatch is
+    "contested" and moves it down. The step grows with the distance of z from the threshold.
+    """
+    if predicted_direction not in ("enriched", "not_enriched"):
+        raise ValueError(f"predicted_direction must be enriched or not_enriched, "
+                         f"got {predicted_direction!r}")
+    observed = "enriched" if z >= Z_ENRICHED else "not_enriched"
+    strength = min(1.0, max(0.1, abs(z - Z_ENRICHED) / 2))
+    if observed == predicted_direction:
+        return "supported", max(confidence, round(confidence + 0.5 * (1 - confidence) * strength, 4))
+    return "contested", min(confidence, round(confidence - 0.5 * confidence * strength, 4))
 
 
 def target_drug_id() -> str | None:

@@ -39,6 +39,17 @@
         "string",
         "null"
       ]
+    },
+    "predicted_direction": {
+      "enum": [
+        "enriched",
+        "not_enriched"
+      ],
+      "description": "What methods A and B should measure for the hypothesis's gene sets."
+    },
+    "testable": {
+      "type": "boolean",
+      "description": "False when methods A and B cannot test the claim. Defaults to true."
     }
   },
   "required": [

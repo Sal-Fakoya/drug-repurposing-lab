@@ -26,6 +26,21 @@
     },
     "feasibility": {
       "type": "number"
+    },
+    "status": {
+      "enum": [
+        "planned",
+        "run",
+        "superseded"
+      ]
+    },
+    "seed": {
+      "type": "integer",
+      "description": "Tie-break seed run_experiment must use and record."
+    },
+    "control": {
+      "type": "boolean",
+      "description": "True for the fixed negative-control gene set."
     }
   },
   "required": [

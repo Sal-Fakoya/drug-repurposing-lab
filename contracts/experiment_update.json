@@ -1,27 +1,25 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Approval",
+  "title": "Experiment update",
   "type": "object",
   "properties": {
-    "res_id": {
+    "exp_id": {
       "type": "string"
     },
-    "decision": {
+    "status": {
       "enum": [
-        "approved",
-        "refused"
+        "planned",
+        "run",
+        "superseded"
       ]
     },
-    "approver": {
-      "type": "string"
-    },
-    "final_ranking_id": {
+    "reason": {
       "type": "string"
     }
   },
   "required": [
-    "res_id",
-    "decision"
+    "exp_id",
+    "status"
   ],
   "additionalProperties": false
 }

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Final ranking",
+  "type": "object",
+  "properties": {
+    "res_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "hyp_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "ranked_drugs": {
+      "type": "array",
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Ranked drug",
+        "type": "object",
+        "properties": {
+          "drug_id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "drug_id",
+          "score",
+          "rank"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "method": {
+      "type": "string"
+    },
+    "seed": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "res_ids",
+    "hyp_ids",
+    "ranked_drugs",
+    "method",
+    "seed"
+  ],
+  "additionalProperties": false
+}

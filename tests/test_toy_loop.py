@@ -22,7 +22,8 @@ def test_target_rank_never_appears_in_agent_facing_output():
     gs = tools.find_gene_set("mtor", 2013)["gene_set_ids"]
     hid = tools.write_ledger("hypothesis", {
         "claim": "m", "evidence_ids": ev, "confidence": 0.5, "label": "agent-generated",
-        "status": "active", "gene_set_ids": gs})["id"]
+        "status": "active", "gene_set_ids": gs, "predicted_direction": "enriched"},
+        agent="insight")["id"]
     sel = tools.planner_select_arms(2)
     run = tools.run_experiment(sel["exp_ids"][0])
     an = tools.analyze_result(run["res_id"])
@@ -35,7 +36,8 @@ def test_run_experiment_output_has_no_drug_names():
     ev = tools.search_literature("q", 2013)["evidence_ids"]
     tools.write_ledger("hypothesis", {
         "claim": "m", "evidence_ids": ev, "confidence": 0.5, "label": "agent-generated",
-        "status": "active", "gene_set_ids": ["GS_MTOR"]})
+        "status": "active", "gene_set_ids": ["GS_MTOR"], "predicted_direction": "enriched"},
+        agent="insight")
     run = tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])
     assert all(i.startswith("d") and i[1:].isdigit() for i in run["top_ids"])
 
@@ -57,7 +59,8 @@ def test_same_seed_gives_same_arm_choices(monkeypatch):
             tools.write_ledger("hypothesis", {
                 "claim": term, "evidence_ids": ev, "confidence": 0.5,
                 "label": "agent-generated", "status": "active",
-                "gene_set_ids": tools.find_gene_set(term, 2013)["gene_set_ids"]})
+                "gene_set_ids": tools.find_gene_set(term, 2013)["gene_set_ids"],
+                "predicted_direction": "enriched"}, agent="insight")
         picks.append(tools.planner_select_arms(2)["arm_ids"])
     assert picks[0] == picks[1]
 

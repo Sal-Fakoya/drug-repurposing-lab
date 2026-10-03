@@ -17,12 +17,18 @@ prompt: |
   Protocol:
   1. literature: collect pre-2015 evidence for the disease. Returns evidence_ids.
   2. insight: propose 4 to 6 hypotheses from those evidence_ids. Returns hyp_ids.
-  3. Repeat until the experiment budget is spent or the top 10 is stable for 2 rounds:
+  3. Repeat until the experiment budget is spent or no untested arm remains (planner_select_arms
+     returns stop: true with no exp_ids):
      a. planner: choose 2 arms (hypothesis x method) under the remaining budget. Returns exp_ids.
      b. runner: run both arms in parallel. Returns res_ids.
-     c. analysis: interpret each result, decide contested or supported. Returns verdicts.
+     c. analysis: analyze each result. analyze_result records the verdict and confidence change.
      d. If any hypothesis is contested, call insight with the contradicting res_id to revise.
-  4. safety: review the final ranking and request human approval before anything is published.
+  4. safety: compile the final ranking (compile_final_ranking), review that final_ranking record,
+     and request human approval before anything is published.
+
+  If a sub-agent's call is paused for approval or denied by a policy, do not assume the work is
+  still pending or that it happened. Send to the same agent and title asking for its outcome,
+  and check the ledger ids it reports, before you continue or retry.
   Label every hypothesis agent-generated. Preserve uncertainty. Never give treatment advice.
 
 executor:
@@ -83,7 +89,7 @@ tools:
       required: [exp_id]
   analyze_result: &analyze_result
     type: function
-    description: Compute prediction error, label-free reward and contested flag for a res_id, and record the hypothesis_update.
+    description: Compare a res_id with its hypothesis's predicted direction; record the verdict and confidence change together.
     callable: lab.tools.analyze_result
     parameters:
       type: object
@@ -99,7 +105,7 @@ tools:
         kind: {type: string}
         payload: {type: object}
         agent: {type: string, description: Name of the sub-agent writing the row.}
-      required: [kind, payload]
+      required: [kind, payload, agent]
   read_ledger: &read_ledger
     type: function
     description: Read ledger objects by id. Cannot read evaluation only columns.
@@ -108,14 +114,27 @@ tools:
       type: object
       properties: {ids: {type: array, items: {type: string}}}
       required: [ids]
+  read_planner_ledger: &read_planner_ledger
+    type: function
+    description: Planner's ledger view. Hypotheses, specs and verdicts by id, plus arm statistics. No results.
+    callable: lab.tools.read_planner_ledger
+    parameters:
+      type: object
+      properties: {ids: {type: array, items: {type: string}}}
+      required: [ids]
+  compile_final_ranking: &compile_final_ranking
+    type: function
+    description: Deterministically build a final_ranking record from the results of supported hypotheses.
+    callable: lab.tools.compile_final_ranking
+    parameters: {type: object, properties: {}}
   publish_final_ranking: &publish_final_ranking
     type: function
-    description: Publish the final ranked list. Consequential. Requires human approval.
+    description: Publish a final_ranking record after a passing safety_review. Consequential. Requires human approval.
     callable: lab.tools.publish_final_ranking
     parameters:
       type: object
-      properties: {res_id: {type: string}}
-      required: [res_id]
+      properties: {final_ranking_id: {type: string}}
+      required: [final_ranking_id]
 
   # ---------- sub-agents ----------
   literature:
@@ -139,10 +158,14 @@ tools:
     description: Proposes labeled mechanism hypotheses grounded in evidence_ids. Owns what we believe.
     prompt: |
       Propose 4 to 6 competing mechanism hypotheses. Each needs: claim, supporting evidence_ids,
-      confidence 0 to 1, gene_set_ids (use find_gene_set), label "agent-generated", status "active".
+      confidence 0 to 1, status "active", and EITHER gene_set_ids (use find_gene_set) plus
+      predicted_direction ("enriched" or "not_enriched": what methods A and B should measure for
+      those gene sets if the claim is true) OR testable: false when methods A and B cannot test it.
+      write_ledger rejects a testable hypothesis without gene_set_ids and predicted_direction.
+      The "agent-generated" label is added automatically.
       Include at least one hypothesis that contradicts the leading one.
       Use only evidence you can read with read_evidence. If asked to revise after a contested result,
-      read that res_id, record the change with write_ledger kind "hypothesis_update" (hyp_id, status, confidence), and add a new hypothesis that explains the contradiction.
+      read that res_id, record the change with write_ledger kind "hypothesis_update" (hyp_id, status, confidence; you may lower confidence but never raise it), and add a new hypothesis that explains the contradiction.
       Write each hypothesis with write_ledger kind "hypothesis" and return hyp_ids.
       Whenever you call write_ledger, pass agent "insight".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
@@ -156,16 +179,20 @@ tools:
     type: agent
     description: Chooses which experiments to run next under a budget. Owns what we test.
     prompt: |
-      For every active hypothesis there are two methods, A (pathway enrichment) and B (literature graph).
-      Call planner_select_arms with k=2. It samples arms by Thompson sampling on past label-free reward
-      and cost, within the remaining budget. You may override one arm only with a written reason
-      (for example to test a contradicting hypothesis). Write each experiment spec with write_ledger
-      kind "experiment_spec" including expected_cost, expected_learning, feasibility. Return exp_ids.
+      For every active, testable hypothesis there are two methods, A (pathway enrichment) and
+      B (literature graph), plus a fixed negative-control gene set you can run with either method.
+      Call planner_select_arms with k=2. It samples untested arms by Thompson sampling on past
+      label-free reward and cost, writes the experiment specs itself (status "planned", with a seed)
+      and returns their exp_ids. Do not write those specs again. If it returns stop: true, report that
+      the budget is spent or no untested arm remains. You may override one arm only with a written
+      reason, by writing one experiment_spec with write_ledger; a design that was already planned or
+      run is rejected. Planning charges no budget; running does. Read the ledger with
+      read_planner_ledger: you see hypotheses, specs, verdicts and arm statistics only.
       You never see drug names, drug rankings, or the target drug's rank.
       Whenever you call write_ledger, pass agent "planner".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
-      read_ledger: *read_ledger
+      read_planner_ledger: *read_planner_ledger
       planner_select_arms: *planner_select_arms
       write_ledger: *write_ledger
 
@@ -187,12 +214,13 @@ tools:
     type: agent
     description: Interprets results, updates beliefs, reopens assumptions. Owns what we learned.
     prompt: |
-      For each res_id call analyze_result, then read the linked hypothesis and result.
-      Decide: supported, weakened, or contested. A result is contested when the hypothesis predicted
-      enrichment and the measured enrichment is absent or reversed (analyze_result gives the numbers).
-      Explain in 3 sentences that cite evidence_ids and res_ids. State uncertainty explicitly.
-      Write a "verdict" object with write_ledger (agent "analysis"). analyze_result already records
-      the hypothesis_update (update_id), so do not write another. Return verdicts. Never rank drugs yourself.
+      For each res_id call analyze_result. It compares the result with the hypothesis's own
+      predicted_direction and writes the verdict (verdict_id) and the confidence change (update_id)
+      together, so do not write either yourself; write_ledger rejects verdicts. For a
+      negative-control result it reports control_passed instead and updates no hypothesis.
+      Then read the linked hypothesis and result, and explain each verdict in 3 sentences that
+      cite evidence_ids and res_ids. State uncertainty explicitly. Return the verdict_ids.
+      Never rank drugs yourself.
       Whenever you call write_ledger, pass agent "analysis".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
@@ -204,14 +232,18 @@ tools:
     type: agent
     description: Reviews outputs for treatment-like claims and gates publication on human approval.
     prompt: |
-      Read the final ranking and every verdict. Check: every claim cites evidence, every hypothesis is
-      labeled agent-generated, no dosing or treatment advice, limitations stated, validation needed
-      before real-world use. Write a "safety_review" object. Then call publish_final_ranking.
+      Call compile_final_ranking. It builds a final_ranking record from the results of supported
+      hypotheses and returns final_ranking_id. Read that record and every verdict it draws on. Check:
+      every claim cites evidence, every hypothesis is labeled agent-generated, synthetic data is
+      flagged, no dosing or treatment advice, limitations stated, validation needed before
+      real-world use. Write a "safety_review" object with final_ranking_id set to that id (and
+      res_id set to the same id). Then call publish_final_ranking with that final_ranking_id.
       That call pauses for a human decision. If refused, report why and stop.
       Whenever you call write_ledger, pass agent "safety".
     executor: {harness: claude-sdk, model: databricks-claude-sonnet-4-6, auth: {type: databricks, profile: oss}}
     tools:
       read_ledger: *read_ledger
+      compile_final_ranking: *compile_final_ranking
       publish_final_ranking: *publish_final_ranking
       write_ledger: *write_ledger
 
@@ -224,7 +256,7 @@ policies:
     type: function
     handler: lab.policies.mask_guard
     factory_params:
-      scoring_tools: [planner_select_arms, run_experiment, analyze_result]
+      scoring_tools: [planner_select_arms, run_experiment, analyze_result, compile_final_ranking]
       blocked_terms: [sirolimus, rapamycin, castleman, imcd, siltuximab, tocilizumab]
   approval_gate:
     type: function

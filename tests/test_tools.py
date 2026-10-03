@@ -6,11 +6,20 @@ import pytest
 from lab import ledger, scoring, tools
 
 
-def _hypothesis(term: str, confidence: float = 0.5) -> str:
+def _hypothesis(term: str, confidence: float = 0.5, direction: str = "enriched") -> str:
     ev = tools.search_literature("q", 2013)["evidence_ids"]
     return tools.write_ledger("hypothesis", {
-        "claim": term, "evidence_ids": ev, "confidence": confidence, "label": "agent-generated",
-        "status": "active", "gene_set_ids": tools.find_gene_set(term, 2013)["gene_set_ids"]})["id"]
+        "claim": term, "evidence_ids": ev, "confidence": confidence, "status": "active",
+        "gene_set_ids": tools.find_gene_set(term, 2013)["gene_set_ids"],
+        "predicted_direction": direction}, agent="insight")["id"]
+
+
+def _plan_hypothesis_arm() -> str:
+    """Plan one round and return the spec id of the hypothesis arm (not the control)."""
+    for exp_id in tools.planner_select_arms(2)["exp_ids"]:
+        if not ledger.get(exp_id).get("control"):
+            return exp_id
+    raise AssertionError("planner offered no hypothesis arm")
 
 
 # ---------- (1) write_ledger stores the writing agent ----------
@@ -19,13 +28,17 @@ def test_write_ledger_stores_agent_on_the_row():
     ev = tools.search_literature("q", 2013)["evidence_ids"]
     hid = tools.write_ledger("hypothesis", {
         "claim": "c", "evidence_ids": ev, "confidence": 0.5, "label": "agent-generated",
-        "status": "active", "gene_set_ids": ["GS_IL6"]}, agent="insight")["id"]
+        "status": "active", "gene_set_ids": ["GS_IL6"], "predicted_direction": "enriched"},
+        agent="insight")["id"]
     assert ledger._find(hid)["agent"] == "insight"
 
 
-def test_write_ledger_agent_defaults_to_none():
-    hid = _hypothesis("il-6")
-    assert ledger._find(hid)["agent"] is None
+@pytest.mark.parametrize("agent", [None, "", "director", "nobody"])
+def test_write_ledger_requires_a_known_agent(agent):
+    with pytest.raises((ValueError, TypeError)):
+        tools.write_ledger("hypothesis", {
+            "claim": "c", "evidence_ids": ["ev_001"], "confidence": 0.5, "status": "active",
+            "gene_set_ids": ["GS_IL6"], "predicted_direction": "enriched"}, agent=agent)
 
 
 # ---------- (2) planner: one arm per hypothesis per round, untried arms first ----------
@@ -35,14 +48,16 @@ def test_planner_never_picks_two_arms_of_one_hypothesis(monkeypatch, seed):
     monkeypatch.setattr(tools, "_rng", np.random.default_rng(seed))
     for term in ("il-6", "mtor", "jak"):
         _hypothesis(term)
-    sel = tools.planner_select_arms(4)
+    sel = tools.planner_select_arms(5)
     hyps = [ledger.get(e)["hyp_id"] for e in sel["exp_ids"]]
-    assert len(hyps) == 3 and len(set(hyps)) == 3
+    # three hypotheses plus the negative control, each at most once
+    assert len(hyps) == 4 and len(set(hyps)) == 4
 
 
-def test_planner_with_one_hypothesis_picks_one_arm():
-    _hypothesis("mtor")
-    assert len(tools.planner_select_arms(2)["exp_ids"]) == 1
+def test_planner_with_one_hypothesis_picks_one_arm_of_it():
+    hid = _hypothesis("mtor")
+    hyps = [ledger.get(e)["hyp_id"] for e in tools.planner_select_arms(3)["exp_ids"]]
+    assert hyps.count(hid) == 1 and len(hyps) == len(set(hyps))
 
 
 def test_planner_prefers_untried_arms(monkeypatch):
@@ -63,7 +78,7 @@ def test_analyze_result_persists_update_and_chains_confidence():
     hid = _hypothesis("mtor", confidence=0.5)
 
     first = tools.analyze_result(
-        tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])["res_id"])
+        tools.run_experiment(_plan_hypothesis_arm())["res_id"])
     upd = ledger._find(first["update_id"])
     assert upd["kind"] == "hypothesis_update" and upd["parent_id"] == first["res_id"]
     assert upd["agent"] == "analysis"
@@ -71,16 +86,16 @@ def test_analyze_result_persists_update_and_chains_confidence():
     assert ledger.get(hid)["confidence"] == first["new_confidence"]
 
     second = tools.analyze_result(
-        tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])["res_id"])
+        tools.run_experiment(_plan_hypothesis_arm())["res_id"])
     assert second["prior_confidence"] == first["new_confidence"]
-    expected = scoring.update_confidence(first["new_confidence"], second["z"], tools.PREDICTED_Z)
+    _, expected = scoring.assess(second["z"], "enriched", first["new_confidence"])
     assert math.isclose(second["new_confidence"], expected, abs_tol=1e-3)  # output z is rounded
     assert ledger.get(hid)["confidence"] == second["new_confidence"]
 
 
 def test_reanalysing_a_result_does_not_apply_the_update_twice():
     _hypothesis("mtor")
-    res_id = tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])["res_id"]
+    res_id = tools.run_experiment(_plan_hypothesis_arm())["res_id"]
     first = tools.analyze_result(res_id)
     again = tools.analyze_result(res_id)
     assert len(ledger.rows_of_kind("hypothesis_update")) == 1

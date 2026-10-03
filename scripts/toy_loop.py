@@ -8,30 +8,39 @@ import sys
 from lab import ledger, tools
 
 
-def run(rounds: int = 10, k: int = 2, verbose: bool = True) -> dict:
+def run(rounds: int = 50, k: int = 2, verbose: bool = True) -> dict:
+    """Run until the budget is spent or no untested arm remains (planner returns stop)."""
     ev = tools.search_literature("idiopathic multicentric castleman disease", 2015)["evidence_ids"]
     seeds = [("IL-6 drives the disease", "il-6", 0.7), ("mTOR signalling drives it", "mtor", 0.5),
              ("JAK signalling drives it", "jak", 0.4), ("Unmapped mechanism", "unknown", 0.3)]
     for claim, term, conf in seeds:
         gs = tools.find_gene_set(term, 2015)["gene_set_ids"]
         tools.write_ledger("hypothesis", {
-            "claim": claim, "evidence_ids": ev, "confidence": conf, "label": "agent-generated",
-            "status": "active", "gene_set_ids": gs, "parent_id": None}, agent="insight")
-    history = []
+            "claim": claim, "evidence_ids": ev, "confidence": conf, "status": "active",
+            "gene_set_ids": gs, "predicted_direction": "enriched", "parent_id": None},
+            agent="insight")
+    history, stop_reason = [], "round limit"
     for r in range(1, rounds + 1):
         sel = tools.planner_select_arms(k)
-        if not sel["exp_ids"]:
+        if sel["stop"]:
+            stop_reason = sel["message"]
             break
         for exp_id in sel["exp_ids"]:
             res = tools.run_experiment(exp_id)
-            an = tools.analyze_result(res["res_id"])  # also records the hypothesis_update
+            an = tools.analyze_result(res["res_id"])  # writes the verdict and the update
             tgt = ledger.read_eval_only(res["res_id"])  # harness only, never shown to agents
             history.append({"round": r, "exp_id": exp_id, "arm": ledger.get(exp_id)["arm_id"],
-                            "z": an["z"], "contested": an["contested"],
+                            "z": an["z"], "verdict": an.get("verdict", "control"),
+                            "confidence": an.get("new_confidence"),
                             "target_rank": tgt["target_drug_rank"] if tgt else None})
             if verbose:
                 print(history[-1])
-    return {"spent": ledger.spent(), "history": history}
+    final = tools.compile_final_ranking()
+    if verbose:
+        print("stopped:", stop_reason)
+        print("final ranking:", final)
+    return {"spent": ledger.spent(), "history": history, "stop_reason": stop_reason,
+            "final": final}
 
 
 if __name__ == "__main__":
