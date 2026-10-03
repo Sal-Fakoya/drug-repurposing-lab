@@ -1,0 +1,13 @@
+{
+  "description": "Real replay, cutoff from lab.CUTOFF_YEAR. Set LAB_TARGET_DRUG to the masked id of the target. Terms are resolved by find_gene_set against the dated pathway snapshot. Confirm these terms before the first real run and do not change them after seeing results.",
+  "query": "idiopathic multicentric Castleman disease",
+  "k": 2,
+  "initial": [
+    {"claim": "IL-6 signalling drives the disease", "term": "interleukin-6 signaling", "confidence": 0.7, "predicted_direction": "enriched"},
+    {"claim": "JAK-STAT signalling drives the disease", "term": "jak-stat signaling", "confidence": 0.4, "predicted_direction": "enriched"},
+    {"claim": "VEGF-driven angiogenesis drives the disease", "term": "vegf signaling", "confidence": 0.3, "predicted_direction": "enriched"}
+  ],
+  "reopen": [
+    {"claim": "PI3K/AKT/mTOR signalling drives the disease (revision after a contested result)", "term": "mtor signaling", "confidence": 0.5, "predicted_direction": "enriched"}
+  ]
+}

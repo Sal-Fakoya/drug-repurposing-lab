@@ -1,0 +1,13 @@
+{
+  "description": "Toy replay. The IL-6 prior is known at the start; mTOR is only proposed by the reopen step after a contested result, as in the real story. Toy results are plumbing checks, never findings.",
+  "query": "idiopathic multicentric castleman disease",
+  "k": 2,
+  "initial": [
+    {"claim": "IL-6 drives the disease", "term": "il-6", "confidence": 0.7, "predicted_direction": "enriched"},
+    {"claim": "JAK signalling drives it", "term": "jak", "confidence": 0.4, "predicted_direction": "enriched"},
+    {"claim": "Unmapped mechanism", "term": "unknown", "confidence": 0.3, "predicted_direction": "enriched"}
+  ],
+  "reopen": [
+    {"claim": "mTOR signalling drives it (revision after a contested result)", "term": "mtor", "confidence": 0.5, "predicted_direction": "enriched"}
+  ]
+}

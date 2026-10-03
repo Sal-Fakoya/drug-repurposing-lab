@@ -328,15 +328,9 @@ def compile_final_ranking() -> dict:
             used.append((v["res_id"], hyp))
     if not used:
         raise ValueError("no supported results to rank yet")
-    scores: dict[str, float] = {}
-    for res_id, hyp in used:
-        ranked = ledger.get(res_id)["ranked_drugs"]
-        n = len(ranked)
-        for r in ranked:
-            scores[r["drug_id"]] = (scores.get(r["drug_id"], 0.0)
-                                    + hyp["confidence"] * (n - r["rank"] + 1) / n)
     seed = scoring.seed()
-    ranked = scoring._rank(scores, limit=200, run_seed=seed)
+    ranked = scoring.borda([(ledger.get(r)["ranked_drugs"], h["confidence"]) for r, h in used],
+                           seed)
     fin_id = ledger.append("final_ranking", {
         "res_ids": [r for r, _ in used], "hyp_ids": sorted({h["id"] for _, h in used}),
         "ranked_drugs": ranked, "method": FINAL_METHOD, "seed": seed}, agent="safety")
