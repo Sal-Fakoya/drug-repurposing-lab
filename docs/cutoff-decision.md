@@ -129,3 +129,50 @@ what any individual did.
 - Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
 - Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
 - Decided on ________ by ________ and ________.
+
+## ChEMBL 19 pin (scripts/check_chembl.sql and check_chembl_mtor.sql)
+
+- Version table: ChEMBL_19, created 2014-07-03.
+- Approved molecules (max_phase 4): 2759. Approved parent molecules with a curated mechanism
+  target: 1617 (pool size N under the curated definition).
+- Present and approved: sirolimus, everolimus, temsirolimus, siltuximab, tocilizumab, anakinra,
+  rituximab, thalidomide.
+- Curated mechanism targets: siltuximab -> IL6 (P05231), tocilizumab -> IL6R (P08887),
+  anakinra -> IL1R1 (P14778). Sirolimus, everolimus, temsirolimus -> FKBP1A (P62942).
+- mTOR (P42345) is in this release as target CHEMBL2842, named "FK506 binding protein 12", and
+  as the complex CHEMBL2221341 (mTORC1). Targets MUST be matched by UniProt accession, never name.
+- Sirolimus has potent recorded activity on CHEMBL2842 in documents up to 2014 (IC50 0.1, 0.45,
+  1.6, 3.47 and 10 nM; one 10000 nM). Temsirolimus has one value (1760 nM). Everolimus has none
+  in this snapshot: a ChEMBL coverage difference, not a biological one.
+- Approved molecules with curated target FKBP1A (they tie under a gene set containing it):
+  everolimus, pimecrolimus, sirolimus, tacrolimus, temsirolimus.
+
+## Pre-registered drug-target link definitions (fixed before the lab runs on real data)
+
+- Analysis 1 (primary): a drug links to a gene if ChEMBL lists it as a curated mechanism target.
+- Analysis 2 (sensitivity, reported alongside): curated targets plus human targets with a recorded
+  IC50, Ki or Kd of 1000 nM or less in a document dated before the cutoff.
+- Both rules apply identically to every drug. Gene sets are never edited by hand. Both analyses
+  are reported whatever they show. The primary was chosen knowing that sirolimus links to mTOR
+  only under Analysis 2.
+- Still to fill in: MSigDB version ________; FKBP1A present in the mTOR gene sets: ________.
+
+## Bridge evidence (abstracts read)
+
+- Supports: sirolimus complete responses in autoimmune lymphoproliferative syndrome
+  (PMID 19208097, small series, different disease).
+- Does not support: IL-6 activating PI3K/Akt/mTOR. PMID 12242656 reports IGF-1 but not IL-6
+  increased Akt/P70S6K phosphorylation. PMID 12953803 describes IL-6 acting through JAK/STAT
+  and MAPK.
+- 114 of 144 sirolimus-lymphoproliferative records are transplant papers, so a naive disease-label
+  co-mention link would credit sirolimus for the wrong reason.
+- Expectation: sirolimus may not reach the top 10. This is an acceptable, reportable outcome.
+
+## Pre-registered evaluation (fixed before the lab runs on real data)
+
+- Primary: rank of sirolimus as the mid-rank of its tie group (scoring.log_target_rank_eval_only).
+- Secondary: best mid-rank among sirolimus, everolimus and temsirolimus.
+- Run under both link definitions above.
+- Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
+- Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
+- Decided on ________ by ________ and ________.
