@@ -45,6 +45,9 @@ TOPICS = {
     "rituximab": f"{DISEASE} AND {ta('rituximab')}",
     "CANARY disease AND sirolimus/rapamycin/mTOR": f"{DISEASE} AND {MTOR}",
     "CANARY, excluding HHV-8/Kaposi/HIV": f"{DISEASE} AND {MTOR} AND NOT {ta(*VIRAL_TERMS)}",
+    "IL-6 AND PI3K/AKT/mTOR (lymphoproliferative)": (
+        f"{IL6} AND {ta('PI3K', 'AKT', 'mTOR')} AND "
+        f"{ta('lymphoproliferative', 'Castleman', 'plasma cell')}"),
     "sirolimus AND lymphoproliferative": f"{ta('sirolimus', 'rapamycin')} AND {ta('lymphoproliferative')}",
 }
 
@@ -137,6 +140,9 @@ def main() -> int:
     dump("il6_nonresponse_records", TOPICS["IL-6 AND refractory/no response (loose)"])
     dump("tocilizumab_records", TOPICS["tocilizumab"])
     dump("siltuximab_records", TOPICS["siltuximab"])
+    print("\n   Bridge evidence: how could the lab reach mTOR without the disease name?")
+    dump("sirolimus_lpd_records", TOPICS["sirolimus AND lymphoproliferative"])
+    dump("il6_pi3k_records", TOPICS["IL-6 AND PI3K/AKT/mTOR (lymphoproliferative)"])
 
     print("\nUse only title, abstract and firstPublicationDate downstream. Do NOT use citedByCount,")
     print("text-mined annotations or MeSH terms: they are computed today and leak post-cutoff knowledge.")
