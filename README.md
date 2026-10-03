@@ -1,3 +1,5 @@
+# Hack-Nation-Hackathon-Team-Nebula - Drug Repurposing Lab
+
 # Drug Repurposing Lab
 
 An agentic lab built with Omnigent for Hack-Nation Challenge 03. It replays a known discovery
