@@ -140,7 +140,8 @@ def run_experiment(exp_id: str) -> dict:
         "exp_id": exp_id, "ranked_drugs": ranked, "cost": spec["expected_cost"],
         "seed": seed, "artifact_path": None}, agent="runner")
     scoring.log_target_rank_eval_only(res_id, ranked)  # evaluation only, hidden from agents
-    return {"res_id": res_id, "n_ranked": len(ranked), "top_ids": [r["drug_id"] for r in ranked[:5]]}
+    return {"res_id": res_id, "n_ranked": len(ranked),
+            "top_ids": [r["drug_id"] for r in ranked[:5]]}
 
 
 # ---------- analysis ----------

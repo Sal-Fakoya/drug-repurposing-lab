@@ -62,7 +62,8 @@ def test_planner_prefers_untried_arms(monkeypatch):
 def test_analyze_result_persists_update_and_chains_confidence():
     hid = _hypothesis("mtor", confidence=0.5)
 
-    first = tools.analyze_result(tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])["res_id"])
+    first = tools.analyze_result(
+        tools.run_experiment(tools.planner_select_arms(1)["exp_ids"][0])["res_id"])
     upd = ledger._find(first["update_id"])
     assert upd["kind"] == "hypothesis_update" and upd["parent_id"] == first["res_id"]
     assert upd["agent"] == "analysis"
