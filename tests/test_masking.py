@@ -241,3 +241,18 @@ def test_command_line_init_still_refuses_to_replace_an_existing_mask(tmp_path, m
     monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
     with pytest.raises(FileExistsError):
         masking.main(["init"])
+
+
+def test_restore_accepts_a_mask_made_for_a_larger_pool(tmp_path):
+    """The pool shrank from 1885 to 1146 drugs after masks were made: extra map entries are harmless."""
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4", "CHEMBL3"))
+    conn = _conn_with_target()
+    masking.init(snap.drugs, {}, "CHEMBL1", snap.sha256, tmp_path / "A", "shared-salt")
+    (tmp_path / "B").mkdir()
+    (tmp_path / "B" / "mask.json").write_bytes((tmp_path / "A" / "mask.json").read_bytes())
+    links = {"curated": [("CHEMBL1", "P62942")], "curated+activity": [("CHEMBL1", "P62942")]}
+    smaller = snapshot.Snapshot(2015, "h" * 64, ["CHEMBL1", "CHEMBL4"], links, {}, {})
+    masking.restore_from_snapshot(smaller, conn, tmp_path / "B")
+    b = masking.load(tmp_path / "B")
+    assert b.mask("CHEMBL4") == masking.load(tmp_path / "A").mask("CHEMBL4")
+    assert [p["drug_id"] for p in b.masked_pool(smaller)] == sorted(b.mask(d) for d in ("CHEMBL1", "CHEMBL4"))

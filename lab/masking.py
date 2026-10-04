@@ -138,8 +138,10 @@ def restore_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EV
     """Rebuild names.json and target.json next to a mask.json you were given. The salt is NOT changed.
 
     Use this on a second machine: copy mask.json (privately) into the eval folder, then restore. It
-    first checks that the salt reproduces mask.json's own id map for THIS snapshot, so a wrong
-    snapshot, a wrong cutoff or a corrupted file is refused instead of silently giving other ids.
+    first checks that the salt reproduces mask.json's own ids for every drug in THIS snapshot, so a
+    wrong snapshot, a wrong cutoff or a corrupted file is refused instead of silently giving other
+    ids. The map may hold MORE drugs than the snapshot (the pool can shrink, as it did from 1885
+    to 1146); masking depends only on the salt, so the extra entries are harmless.
     """
     eval_dir = Path(eval_dir)
     try:
@@ -148,7 +150,7 @@ def restore_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EV
         raise FileNotFoundError(f"{exc.filename} missing: copy the mask.json you were sent into "
                                 f"{eval_dir} first (do NOT run init: it would create a different salt)") from exc
     expected = {masked_id(given["salt"], d): d for d in snap.drugs}
-    if expected != given["map"]:
+    if any(given["map"].get(mid) != drug for mid, drug in expected.items()):
         raise ValueError("mask.json does not match this snapshot: the salt, the cutoff or the "
                          "snapshot differs from the one it was made for. Nothing was written.")
     existing = [f for f in ("names.json", "target.json") if (eval_dir / f).exists()]
