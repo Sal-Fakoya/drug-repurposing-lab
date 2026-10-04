@@ -159,11 +159,12 @@ def test_ruler_is_an_accessible_offline_image(tmp_path):
     assert 'role="img"' in svg and "<title" in svg and "xmlns" not in svg and "http" not in svg
 
 
-def test_section_links_point_at_real_sections(tmp_path):
+def test_each_tab_has_its_own_pane(tmp_path):
     page = _text(dash.build(tmp_path / "i.html", "toy"))
-    links = re.findall(r'<a href="#(\w+)"', page)
-    assert links == ["saw", "scored", "provenance", "limits"]
-    assert all(f'id="{name}"' in page for name in links)
+    tabs = re.findall(r'<label for="(t\d)">', page)
+    assert tabs == ["t1", "t2", "t3", "t4"]
+    assert all(f'id="{t}"' in page for t in tabs) and page.count('class="sec pane"') == 4
+    assert "<script" not in page
 
 
 def test_both_analyses_get_a_panel_with_a_plain_empty_state(tmp_path):

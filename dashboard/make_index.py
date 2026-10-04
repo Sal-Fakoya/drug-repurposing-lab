@@ -70,7 +70,7 @@ def headline_html(rows, eval_rows):
     if not res:
         return ""
     n = len(res[0]["payload"]["ranked_drugs"])
-    x0, x1, step = 70, 620, 22
+    x0, x1, step = 70, 620, 15
     px = lambda v: x0 + (v - 1) / (n - 1) * (x1 - x0)  # noqa: E731
     h = 40 + step * len(res)
     best = min(ranks[r["id"]] for r in res)
@@ -83,7 +83,7 @@ def headline_html(rows, eval_rows):
         fill = "var(--paper)" if ctrl else ("var(--signal)" if v == best else "var(--ink)")
         g.append(f'<text class="m" x="0" y="{y + 5:.0f}">{e(r["id"])}</text>'
                  f'<line x1="{x0}" x2="{x1}" y1="{y:.0f}" y2="{y:.0f}" stroke="var(--soft)"/>'
-                 f'<circle cx="{px(v):.0f}" cy="{y:.0f}" r="6" fill="{fill}" stroke="var(--ink)" stroke-width="1.5"/>')
+                 f'<circle cx="{px(v):.0f}" cy="{y:.0f}" r="4.5" fill="{fill}" stroke="var(--ink)" stroke-width="1.5"/>')
     g.append(f'<text class="m" x="{x0}" y="14">1 (best)</text><text class="m" x="{x1}" y="14" text-anchor="end">{n} (worst)</text>'
              f'<text class="m" x="{(x0 + x1) / 2:.0f}" y="14" text-anchor="middle">pool middle</text>')
     svg = (f'<svg viewBox="0 0 640 {h}" role="img" aria-label="Target rank per result, out of {n} drugs">'

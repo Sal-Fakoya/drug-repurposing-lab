@@ -82,9 +82,17 @@ figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
 .empty{border:1px dashed var(--ink);background:var(--panel);border-radius:2px;padding:1.1rem 1.2rem}
 .empty strong{display:block;font:700 1.05rem var(--serif)}
 .empty p{margin:.25rem 0 0;max-width:56ch;color:var(--muted)}
+.pane{display:none}
+#t1:checked~#scored,#t2:checked~#saw,#t3:checked~#provenance,#t4:checked~#limits{display:block}
+.tab{position:absolute;opacity:0;pointer-events:none}
+.pills label{cursor:pointer;padding:.5rem .9rem;border:1px solid var(--ink);background:var(--paper)}
+#t1:checked~.pills label[for=t1],#t2:checked~.pills label[for=t2],#t3:checked~.pills label[for=t3],#t4:checked~.pills label[for=t4]{background:var(--ink);color:var(--paper)}
+#t1:focus-visible~.pills label[for=t1],#t2:focus-visible~.pills label[for=t2],#t3:focus-visible~.pills label[for=t3],#t4:focus-visible~.pills label[for=t4]{outline:3px solid var(--signal);outline-offset:2px}
+details summary{cursor:pointer;margin:.8rem 0}
+@media print{.pane{display:block!important}.pills{display:none}}
 .pair{display:grid;gap:1rem}
 .headline{margin:1rem 0 1.4rem;border:1px solid var(--ink);padding:1rem 1.1rem;background:var(--paper)}
-.headline h3{margin:0 0 .2rem}.headline svg{width:100%;height:auto;display:block;margin-top:.6rem}
+.headline h3{margin:0 0 .2rem}.headline svg{width:100%;max-width:760px;height:auto;display:block;margin-top:.6rem}
 .headline text{font:14px var(--sans);fill:var(--ink)}.headline .m{fill:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--ink);border-radius:2px;padding:1rem 1.1rem}
 .panel h3{margin:0}
@@ -173,8 +181,8 @@ def render_rows(rows: list[dict]) -> str:
     body = "".join(
         f"<tr><td><code>{e(r['id'])}</code></td><td>{e(r['kind'])}</td><td>{e(r.get('agent') or '')}</td>"
         f"<td>{SYNTHETIC_TAG if is_synthetic(r) else ''}</td></tr>" for r in rows)
-    return ("<h3>Ledger rows loaded</h3><table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>"
-            f"{body}</table>")
+    return (f"<details><summary>All {len(rows)} ledger rows (id, kind, agent)</summary>"
+            f"<table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>{body}</table></details>")
 
 
 def render_ruler(cutoff: int) -> str:
@@ -242,16 +250,18 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <p>The second view scores the result afterwards. It is the only place the answer is shown.</p>
 <p>Everything here is a hypothesis for laboratory validation, not advice.</p></aside>
 </section>
-<nav class="pills" aria-label="Sections"><a href="#saw">What the lab saw</a><a href="#scored">How it scored afterwards</a><a href="#provenance">Provenance</a><a href="#limits">Limitations</a></nav>
-<section class="sec" id="saw"><h2>What the lab saw</h2>
-<p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
-<section class="sec" id="scored"><h2>How it scored afterwards</h2>
+<input class="tab" type="radio" name="tab" id="t1" checked><input class="tab" type="radio" name="tab" id="t2">
+<input class="tab" type="radio" name="tab" id="t3"><input class="tab" type="radio" name="tab" id="t4">
+<nav class="pills" aria-label="Pages"><label for="t1">Result</label><label for="t2">What the lab saw</label><label for="t3">Provenance</label><label for="t4">Limitations</label></nav>
+<section class="sec pane" id="scored"><h2>How it scored afterwards</h2>
 <p class="lede">Both analyses are reported, whatever they show. Real names and the target highlight appear only here.</p>
 {headline}<div class="pair">
 <div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{scored[0] if scored else none}</div>
 <div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{scored[1] if scored else none}</div></div></section>
-<section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
-<section class="sec" id="limits"><h2>Limitations</h2>{limitations_html}</section>
+<section class="sec pane" id="saw"><h2>What the lab saw</h2>
+<p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
+<section class="sec pane" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
+<section class="sec pane" id="limits"><h2>Limitations</h2>{limitations_html}</section>
 </main>
 <footer class="attribution"><p>{e(ATTRIBUTION)}</p></footer></body></html>
 """
