@@ -159,11 +159,12 @@ def test_ruler_is_an_accessible_offline_image(tmp_path):
     assert 'role="img"' in svg and "<title" in svg and "xmlns" not in svg and "http" not in svg
 
 
-def test_section_links_point_at_real_sections(tmp_path):
+def test_each_tab_has_its_own_pane(tmp_path):
     page = _text(dash.build(tmp_path / "i.html", "toy"))
-    links = re.findall(r'<a href="#(\w+)"', page)
-    assert links == ["saw", "scored", "provenance", "limits"]
-    assert all(f'id="{name}"' in page for name in links)
+    tabs = re.findall(r'<label for="(t\d)">', page)
+    assert tabs == ["t1", "t2", "t3", "t4"]
+    assert all(f'id="{t}"' in page for t in tabs) and page.count('class="sec pane"') == 4
+    assert "<script" not in page
 
 
 def test_both_analyses_get_a_panel_with_a_plain_empty_state(tmp_path):
@@ -177,3 +178,42 @@ def test_page_is_always_light_whatever_the_system_theme(tmp_path):
     page = _text(dash.build(tmp_path / "i.html", "toy"))
     assert "prefers-color-scheme" not in page and "color-scheme:light" in page
     assert "--paper:#FFFFFF" in page
+
+
+def test_attribution_footer_and_no_gene_lists_on_the_page(tmp_path):
+    """ChEMBL is CC BY-SA (attribute it); MSigDB is internal-use only (no gene sets in the output)."""
+    root, ev = _real(tmp_path)
+    snap = snapshot.load(2015, root)
+    page = _text(dash.build(tmp_path / "i.html", "real", 2015, root, eval_dir=ev))
+    assert "ChEMBL release 19" in page and "CC BY-SA 3.0" in page
+    genes = {g for sets in snap.gene_sets.values() for s in sets.values() for g in s}
+    genes |= {g for _, g in snap.links["curated+activity"]}
+    assert genes and not [g for g in genes if g in page]
+    assert not [n for sets in snap.gene_sets.values() for n in sets if n in page]
+
+
+def test_make_index_shows_trail_and_target_rank_but_no_payload_secrets():
+    spec = importlib.util.spec_from_file_location("make_index", ROOT / "dashboard" / "make_index.py")
+    mi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mi)
+    rows = [
+        {"id": "hyp_001", "kind": "hypothesis", "payload": {"claim": "<b>IL-6</b> drives it", "confidence": 0.5}},
+        {"id": "exp_001", "kind": "experiment_spec", "payload": {"hyp_id": "hyp_001", "method": "A"}},
+        {"id": "res_001", "kind": "result", "payload": {"exp_id": "exp_001", "ranked_drugs": [{}, {}, {}]}},
+        {"id": "ver_001", "kind": "verdict", "payload": {"hyp_id": "hyp_001", "verdict": "supported", "z": "3.2"}},
+    ]
+    ev = [{"res_id": "res_001", "target_drug_rank": 2.0}]
+    trail, (a1, a2) = mi.trail_html(rows), mi.scored_html(rows, ev, "curated")
+    assert "&lt;b&gt;IL-6" in trail and "supported (z=3.2)" in trail
+    assert "<strong>2</strong>" in a1 and "Not run in this build" in a2
+    assert "Not run in this build" in mi.scored_html(rows, ev, "curated+activity")[0]
+
+
+def test_headline_chart_is_inline_svg_with_one_dot_per_result():
+    spec = importlib.util.spec_from_file_location("make_index", ROOT / "dashboard" / "make_index.py")
+    mi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mi)
+    rows = [{"id": "exp_001", "kind": "experiment_spec", "payload": {"hyp_id": "h", "method": "A"}},
+            {"id": "res_001", "kind": "result", "payload": {"exp_id": "exp_001", "ranked_drugs": [{}] * 100}}]
+    html = mi.headline_html(rows, [{"res_id": "res_001", "target_drug_rank": 50.0}])
+    assert html.count("<circle") == 1 and "<svg" in html and "http" not in html

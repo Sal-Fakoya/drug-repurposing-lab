@@ -29,6 +29,10 @@ SYNTHETIC_TAG = '<span class="tag">synthetic</span>'
 OUT = ROOT / "dashboard" / "out" / "index.html"
 LIMITATIONS = ROOT / "LIMITATIONS.md"
 
+ATTRIBUTION = ("Drug-target data: ChEMBL release 19 (EMBL-EBI, July 2014), licensed CC BY-SA 3.0; "
+               "Bento et al., Nucleic Acids Res. 2014. Pathway gene sets are used for internal research only "
+               "(MSigDB v4.0, Broad Institute) and are not reproduced on this page.")
+
 CSS = """
 :root{color-scheme:light;--paper:#FFFFFF;--panel:#FAF9F5;--ink:#14181D;--muted:#5B6068;--soft:rgba(20,24,29,.16);
 --grid:rgba(20,24,29,.05);--shadow:#14181D;--mark:#FFF3A8;--signal:#B3261E;
@@ -70,6 +74,7 @@ figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
 .pills{display:flex;flex-wrap:wrap;gap:.5rem;padding:1.2rem 0 .4rem}
 .pills a{border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:.3rem .85rem;border-radius:2px;text-decoration:none;font-size:.95rem}
 .pills a:hover{background:var(--mark);color:#14181D}
+.attribution{font-size:.85rem;color:var(--muted,#555);padding:1rem 0 2rem;border-top:1px solid #ddd}
 .sec{padding:1.4rem 0 1rem}
 .sec h2{font:700 1.5rem/1.2 var(--serif);margin:0}
 .sec h3{font:700 1.05rem var(--serif);margin:1.4rem 0 .3rem}
@@ -77,7 +82,18 @@ figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
 .empty{border:1px dashed var(--ink);background:var(--panel);border-radius:2px;padding:1.1rem 1.2rem}
 .empty strong{display:block;font:700 1.05rem var(--serif)}
 .empty p{margin:.25rem 0 0;max-width:56ch;color:var(--muted)}
+.pane{display:none}
+#t1:checked~#scored,#t2:checked~#saw,#t3:checked~#provenance,#t4:checked~#limits{display:block}
+.tab{position:absolute;opacity:0;pointer-events:none}
+.pills label{cursor:pointer;padding:.5rem .9rem;border:1px solid var(--ink);background:var(--paper)}
+#t1:checked~.pills label[for=t1],#t2:checked~.pills label[for=t2],#t3:checked~.pills label[for=t3],#t4:checked~.pills label[for=t4]{background:var(--ink);color:var(--paper)}
+#t1:focus-visible~.pills label[for=t1],#t2:focus-visible~.pills label[for=t2],#t3:focus-visible~.pills label[for=t3],#t4:focus-visible~.pills label[for=t4]{outline:3px solid var(--signal);outline-offset:2px}
+details summary{cursor:pointer;margin:.8rem 0}
+@media print{.pane{display:block!important}.pills{display:none}}
 .pair{display:grid;gap:1rem}
+.headline{margin:1rem 0 1.4rem;border:1px solid var(--ink);padding:1rem 1.1rem;background:var(--paper)}
+.headline h3{margin:0 0 .2rem}.headline svg{width:100%;max-width:760px;height:auto;display:block;margin-top:.6rem}
+.headline text{font:14px var(--sans);fill:var(--ink)}.headline .m{fill:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--ink);border-radius:2px;padding:1rem 1.1rem}
 .panel h3{margin:0}
 .sub{margin:.1rem 0 .8rem;color:var(--muted);font-size:.92rem}
@@ -165,8 +181,8 @@ def render_rows(rows: list[dict]) -> str:
     body = "".join(
         f"<tr><td><code>{e(r['id'])}</code></td><td>{e(r['kind'])}</td><td>{e(r.get('agent') or '')}</td>"
         f"<td>{SYNTHETIC_TAG if is_synthetic(r) else ''}</td></tr>" for r in rows)
-    return ("<h3>Ledger rows loaded</h3><table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>"
-            f"{body}</table>")
+    return (f"<details><summary>All {len(rows)} ledger rows (id, kind, agent)</summary>"
+            f"<table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>{body}</table></details>")
 
 
 def render_ruler(cutoff: int) -> str:
@@ -210,11 +226,12 @@ def render_facts(prov: list[tuple[str, str]]) -> str:
 
 
 def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html: str,
-           synthetic: bool, rows: list[dict] | None = None) -> str:
+           synthetic: bool, rows: list[dict] | None = None,
+           trail: str = "", scored: tuple[str, str] | None = None, headline: str = "") -> str:
     bars = f'<div class="bar banner" role="note">{e(BANNER)}</div>'
     if synthetic:
         bars += f'<div class="bar synthetic" role="alert">{e(SYNTHETIC)}</div>'
-    saw = (render_rows(rows) if rows else
+    saw = (trail + render_rows(rows) if rows else
            '<div class="empty"><strong>No run loaded</strong>'
            "<p>Build the dashboard with a run's ledger rows to see its hypotheses, experiments and "
            "verdicts here.</p></div>")
@@ -233,22 +250,25 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <p>The second view scores the result afterwards. It is the only place the answer is shown.</p>
 <p>Everything here is a hypothesis for laboratory validation, not advice.</p></aside>
 </section>
-<nav class="pills" aria-label="Sections"><a href="#saw">What the lab saw</a><a href="#scored">How it scored afterwards</a><a href="#provenance">Provenance</a><a href="#limits">Limitations</a></nav>
-<section class="sec" id="saw"><h2>What the lab saw</h2>
-<p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
-<section class="sec" id="scored"><h2>How it scored afterwards</h2>
+<input class="tab" type="radio" name="tab" id="t1" checked><input class="tab" type="radio" name="tab" id="t2">
+<input class="tab" type="radio" name="tab" id="t3"><input class="tab" type="radio" name="tab" id="t4">
+<nav class="pills" aria-label="Pages"><label for="t1">Result</label><label for="t2">What the lab saw</label><label for="t3">Provenance</label><label for="t4">Limitations</label></nav>
+<section class="sec pane" id="scored"><h2>How it scored afterwards</h2>
 <p class="lede">Both analyses are reported, whatever they show. Real names and the target highlight appear only here.</p>
-<div class="pair">
-<div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{none}</div>
-<div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{none}</div></div></section>
-<section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
-<section class="sec" id="limits"><h2>Limitations</h2>{limitations_html}</section>
-</main></body></html>
+{headline}<div class="pair">
+<div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{scored[0] if scored else none}</div>
+<div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{scored[1] if scored else none}</div></div></section>
+<section class="sec pane" id="saw"><h2>What the lab saw</h2>
+<p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
+<section class="sec pane" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
+<section class="sec pane" id="limits"><h2>Limitations</h2>{limitations_html}</section>
+</main>
+<footer class="attribution"><p>{e(ATTRIBUTION)}</p></footer></body></html>
 """
 
 
 def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEAR,
-          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, limitations_path: Path = LIMITATIONS,
+          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, trail: str = "", scored=None, headline: str = "", limitations_path: Path = LIMITATIONS,
           eval_dir: Path | None = None, rows: list[dict] | None = None) -> Path:
     mode = mode or lab.MODE
     if mode == "real" and eval_dir is None:
@@ -264,7 +284,8 @@ def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEA
               file=sys.stderr)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows),
+    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows,
+                          trail=trail, scored=scored, headline=headline),
                    encoding="utf-8")
     return out
 
