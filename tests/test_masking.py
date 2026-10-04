@@ -23,14 +23,18 @@ def _snap(drugs=("CHEMBL1", "CHEMBL2", "CHEMBL3")):
 # SYSTEM and the local Administrators group are the OS itself (the NTFS equivalent of root);
 # OWNER RIGHTS (S-1-3-4) is whoever owns the object, i.e. the user who created the file.
 WINDOWS_OWNER_EQUIVALENT_SIDS = {"S-1-5-18", "S-1-5-32-544", "S-1-3-4"}
+# Pure .NET (no Get-Acl or ConvertTo-Json): those cmdlets live in modules that can fail to load,
+# for example when PSModulePath points Windows PowerShell at PowerShell 7 modules. Any error
+# stops the script, so the check fails closed instead of reading "no ACL" as "owner-only".
 _ACL_SCRIPT = (
-    "$me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "
-    "$out = @{me = $me; acl = @{}}; "
+    "$ErrorActionPreference = 'Stop'; "
+    "[Console]::Out.WriteLine('ME ' + [Security.Principal.WindowsIdentity]::GetCurrent().User.Value); "
     "foreach ($p in ($env:ACL_PATHS -split '[|]')) { "
-    "$out.acl[$p] = @((Get-Acl -LiteralPath $p).Access | "
-    "Where-Object { $_.AccessControlType -eq 'Allow' } | ForEach-Object { "
-    "$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }) }; "
-    "$out | ConvertTo-Json -Depth 3 -Compress")
+    "if ([IO.Directory]::Exists($p)) { $acl = [IO.Directory]::GetAccessControl($p) } "
+    "else { $acl = [IO.File]::GetAccessControl($p) }; "
+    "foreach ($r in $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])) { "
+    "if ($r.AccessControlType -eq 'Allow') { "
+    "[Console]::Out.WriteLine('ACE ' + $r.IdentityReference.Value + ' ' + $p) } } }")
 
 
 def _readers_other_than_owner(paths: list[Path]) -> dict[str, set[str]]:
@@ -39,17 +43,28 @@ def _readers_other_than_owner(paths: list[Path]) -> dict[str, set[str]]:
     POSIX: any group/other permission bit. Windows: NTFS ignores chmod (Python only toggles the
     read-only flag, so st_mode always reads 0o666 / 0o777); access is decided by the ACL, so
     list every allowed SID except the current user and the owner-equivalent SIDs above.
+    Raises if an ACL cannot be read: a path with no allow rule at all is a failed read, not a
+    private file.
     """
     if os.name != "nt":
         return {str(p): {oct(p.stat().st_mode & 0o077)} if p.stat().st_mode & 0o077 else set()
                 for p in paths}
     env = {**os.environ, "ACL_PATHS": "|".join(map(str, paths))}  # -Command ignores trailing args
-    out = subprocess.run(["powershell", "-NoProfile", "-Command", _ACL_SCRIPT],
+    out = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", _ACL_SCRIPT],
                          capture_output=True, text=True, check=True, env=env).stdout
-    data = json.loads(out)
-    allowed = WINDOWS_OWNER_EQUIVALENT_SIDS | {data["me"]}
-    return {p: set(sids if isinstance(sids, list) else [sids]) - allowed
-            for p, sids in data["acl"].items()}
+    me, sids = None, {str(p): set() for p in paths}
+    for line in out.splitlines():
+        kind, _, rest = line.partition(" ")
+        if kind == "ME":
+            me = rest.strip()
+        elif kind == "ACE":
+            sid, _, path = rest.partition(" ")
+            sids[path.strip()].add(sid)
+    unread = [p for p, s in sids.items() if not s]
+    if me is None or unread:
+        raise RuntimeError(f"could not read the ACL of {unread or paths}; output was: {out!r}")
+    allowed = WINDOWS_OWNER_EQUIVALENT_SIDS | {me}
+    return {p: s - allowed for p, s in sids.items()}
 
 
 def _init(tmp_path, salt="test-salt", **kw):
@@ -150,6 +165,20 @@ def test_the_owner_only_check_catches_a_file_others_can_read(tmp_path):
     else:
         f.chmod(0o644)
         assert _readers_other_than_owner([f]) == {str(f): {oct(0o044)}}
+
+
+def test_the_owner_only_check_fails_closed_when_an_acl_cannot_be_read(tmp_path):
+    with pytest.raises((RuntimeError, subprocess.CalledProcessError, FileNotFoundError)):
+        _readers_other_than_owner([tmp_path / "missing.json"])
+
+
+@pytest.mark.skipif(os.name != "nt", reason="PowerShell module loading is Windows-only")
+def test_the_owner_only_check_does_not_depend_on_powershell_modules(tmp_path, monkeypatch):
+    monkeypatch.setenv("PSModulePath", str(tmp_path / "no-modules-here"))  # Get-Acl cannot load
+    f = tmp_path / "leaky.json"
+    f.write_text("{}")
+    subprocess.run(["icacls", str(f), "/grant", "*S-1-5-32-545:(R)"], check=True, capture_output=True)
+    assert _readers_other_than_owner([f]) == {str(f): {"S-1-5-32-545"}}
 
 def test_init_from_snapshot_finds_target_by_name_not_by_typed_id(tmp_path):
     conn = _db()
