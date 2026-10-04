@@ -146,7 +146,9 @@ def test_snapshots_folder_is_gitignored():
 def test_real_snapshot(tmp_path):
     conn = chembl.connect()
     manifest = bs.build(conn, bs.msigdb.MSIGDB_DIR, tmp_path / "v1")
-    assert manifest["pool_size"]["curated"] == 1617  # pre-registered pool size N
+    # Human targets with an accession only (lab.chembl's rule). docs/cutoff-decision.md's N = 1617
+    # counts every approved parent with any drug_mechanism row, including non-human targets.
+    assert manifest["pool_size"] == {"curated": 1146, "curated+activity": 1208}
     t = pd.read_parquet(tmp_path / "v1" / "drug_targets.parquet")
     sirolimus = conn.execute("SELECT chembl_id FROM molecule_dictionary "
                              "WHERE lower(pref_name) = 'sirolimus'").fetchone()[0]
