@@ -30,13 +30,11 @@ OUT = ROOT / "dashboard" / "out" / "index.html"
 LIMITATIONS = ROOT / "LIMITATIONS.md"
 
 CSS = """
-:root{--paper:#F4F1E8;--panel:#FBF9F2;--ink:#14181D;--muted:#5B6068;--soft:rgba(20,24,29,.16);
---grid:rgba(20,24,29,.045);--shadow:#14181D;--mark:#FFF3A8;--signal:#B3261E;
+:root{color-scheme:light;--paper:#FFFFFF;--panel:#FAF9F5;--ink:#14181D;--muted:#5B6068;--soft:rgba(20,24,29,.16);
+--grid:rgba(20,24,29,.05);--shadow:#14181D;--mark:#FFF3A8;--signal:#B3261E;
 --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
 --sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
 --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
-@media (prefers-color-scheme:dark){:root{--paper:#15171A;--panel:#1C1F23;--ink:#ECE9DF;--muted:#A8A69E;
---soft:rgba(236,233,223,.2);--grid:rgba(236,233,223,.05);--shadow:rgba(236,233,223,.28)}}
 *{box-sizing:border-box}
 body{margin:0;color:var(--ink);font:16px/1.6 var(--sans);background-color:var(--paper);
 background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);

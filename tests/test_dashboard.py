@@ -171,3 +171,9 @@ def test_both_analyses_get_a_panel_with_a_plain_empty_state(tmp_path):
     assert "Analysis 1" in page and "Analysis 2" in page
     assert page.count("No run loaded") == 3                      # masked view plus both analysis panels
     assert "sorry" not in page.lower()
+
+
+def test_page_is_always_light_whatever_the_system_theme(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy"))
+    assert "prefers-color-scheme" not in page and "color-scheme:light" in page
+    assert "--paper:#FFFFFF" in page
