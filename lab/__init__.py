@@ -11,3 +11,9 @@ def method_b_include_hhv8() -> bool:
     """Default for method B: count co-mentions from HHV-8-related records too (LAB env, read live)."""
     return os.environ.get("LAB_METHOD_B_INCLUDE_HHV8", "1").strip().lower() not in {
         "0", "false", "no", "off"}
+
+
+def available_methods() -> tuple[str, ...]:
+    """Scoring methods that can run on the current data. Real mode has method A only: method B
+    needs drug names to count co-mentions, which the masked pipeline never has (read live)."""
+    return ("A", "B") if MODE == "toy" else ("A",)
