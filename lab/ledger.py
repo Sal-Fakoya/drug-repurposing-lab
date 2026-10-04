@@ -223,6 +223,8 @@ def active_arms() -> list[dict]:
     exclude_hhv8 = not lab.method_b_include_hhv8()
     for hyp_id, gene_set_ids, control in candidates:
         for method, cost in METHOD_COST.items():
+            if method not in lab.available_methods():
+                continue
             arm_id = f"{hyp_id}:{method}"
             params = {"gene_set_ids": gene_set_ids}
             if method == "B" and exclude_hhv8:  # recorded in the spec, so results show it
