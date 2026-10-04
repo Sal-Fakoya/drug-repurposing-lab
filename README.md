@@ -62,7 +62,8 @@ docs did not settle for us.
 ## What is verified and what is not
 
 Verified here: schemas, ledger validation, policy verdicts, bandit determinism, masking, the
-planner never seeing the target rank, tool allowlists in the YAML (all in `tests/`).
+planner never seeing the target rank, tool allowlists in the YAML, the ChEMBL and MSigDB loaders,
+the hash-verified snapshot and the dashboard build (all in `tests/`).
 
 Not verified: the Omnigent behaviors listed in `agents/README.md`, and any result beyond the single run
 described above. The real data loaders and the snapshot are written and tested.
@@ -74,8 +75,8 @@ described above. The real data loaders and the snapshot are written and tested.
 ## Where to start
 
 Sal: get `omnigent run` working with the director YAML, then work through `agents/README.md`.
-Thierry: replace the `_require_toy()` branches in `lab/scoring.py` and `find_gene_set` in
-`lab/tools.py` with reads from date-stamped Delta snapshots, and fill `data/README.md` and
-`LIMITATIONS.md` as you pin sources.
+Thierry: the loaders, snapshot, masking and dashboard are written. Next is wiring real-mode
+scoring (`masked_drug_pool`, `_gene_union`, `target_drug_id`, `unmask`) once the ledger changes
+land, then running both analyses.
 
 See `HANDOFF.md` for shift handoffs.
