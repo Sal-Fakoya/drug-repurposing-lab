@@ -30,26 +30,75 @@ OUT = ROOT / "dashboard" / "out" / "index.html"
 LIMITATIONS = ROOT / "LIMITATIONS.md"
 
 CSS = """
-:root{--bg:#fafaf7;--fg:#1c1b19;--muted:#5d5a52;--line:#d9d6cc;--card:#fff;--warn:#7a1f1f;--warn-bg:#fbe9e7;
---note:#7a5200;--note-bg:#fff4d6}
-@media (prefers-color-scheme:dark){:root{--bg:#161614;--fg:#ecebe6;--muted:#a9a69c;--line:#3a3935;--card:#1f1f1c;
---warn:#ffb4a9;--warn-bg:#3b1a17;--note:#ffd98a;--note-bg:#33290f}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);
-font:16px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.bars{position:sticky;top:0;z-index:2}
-.bar{padding:.6rem 1rem;font-weight:600;text-align:center}
-.banner{background:var(--note-bg);color:var(--note);border-bottom:2px solid var(--note)}
-.synthetic{background:var(--warn-bg);color:var(--warn);border-bottom:2px solid var(--warn);letter-spacing:.04em}
-main{max-width:56rem;margin:0 auto;padding:1.5rem 1rem 4rem}
-h1{font-size:1.7rem;margin:.2rem 0}h2{font-size:1.15rem;margin:2.2rem 0 .6rem;padding-bottom:.3rem;border-bottom:1px solid var(--line)}
-.q{color:var(--muted);margin:.2rem 0 1rem}
-table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line)}
-th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
-th{width:13rem;color:var(--muted);font-weight:600}td{overflow-wrap:anywhere}code{font-size:.9em}
-.pending{background:var(--card);border:1px dashed var(--line);padding:.8rem 1rem;color:var(--muted)}
-.tag{background:var(--warn-bg);color:var(--warn);padding:0 .35rem;border-radius:3px;font-size:.8em}
-.todo{background:var(--warn-bg);color:var(--warn);padding:0 .35rem;border-radius:3px;font-size:.8em;margin-left:.4rem}
-li{margin:.25rem 0}@media print{.bars{position:static}}
+:root{--paper:#F4F1E8;--panel:#FBF9F2;--ink:#14181D;--muted:#5B6068;--soft:rgba(20,24,29,.16);
+--grid:rgba(20,24,29,.045);--shadow:#14181D;--mark:#FFF3A8;--signal:#B3261E;
+--serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
+--sans:ui-sans-serif,system-ui,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+--mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root{--paper:#15171A;--panel:#1C1F23;--ink:#ECE9DF;--muted:#A8A69E;
+--soft:rgba(236,233,223,.2);--grid:rgba(236,233,223,.05);--shadow:rgba(236,233,223,.28)}}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:16px/1.6 var(--sans);background-color:var(--paper);
+background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+background-size:32px 32px}
+a:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.bars{position:sticky;top:0;z-index:5}
+.bar{padding:.55rem 1rem;text-align:center;font-size:.95rem;font-weight:600;border-bottom:1px solid #14181D}
+.banner{background:var(--mark);color:#14181D}
+.synthetic{background:var(--signal);color:#fff;font-weight:700;letter-spacing:.02em}
+.site,main{max-width:72rem;margin:0 auto;padding-left:1rem;padding-right:1rem}
+.site{padding-top:1rem;padding-bottom:.4rem;display:flex;justify-content:space-between;align-items:center;gap:.8rem;flex-wrap:wrap}
+.name{font:700 1.15rem var(--serif)}
+.chips{display:flex;gap:.5rem;flex-wrap:wrap}
+.chip{border:1px solid var(--ink);background:var(--panel);padding:.1rem .6rem;border-radius:2px;font-size:.88rem}
+main{padding-bottom:5rem}
+.hero{display:grid;gap:2rem;padding:1.6rem 0 2rem;border-bottom:1px solid var(--ink)}
+h1{font:700 clamp(1.7rem,3.4vw,2.6rem)/1.14 var(--serif);letter-spacing:-.01em;margin:0 0 1.6rem;max-width:26em}
+figure{margin:0}
+.ruler{display:block;width:100%;max-width:40rem;height:auto}
+figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
+.yr{fill:var(--ink);font:16px var(--sans)}
+.cap{fill:var(--muted);font:16px var(--sans)}
+.read{fill:var(--mark);stroke:#14181D;stroke-width:1}
+.readtxt{fill:#14181D;font:600 16px var(--sans)}
+.hide{fill:url(#hide);stroke:var(--ink);stroke-width:1}
+.hatch{stroke:var(--muted);stroke-width:1.5}
+.cut{stroke:var(--ink);stroke-width:3}
+.axis{stroke:var(--ink);stroke-width:1}
+.cutlab{fill:var(--ink);font:700 16px var(--sans)}
+.run{background:var(--panel);border:1px solid var(--ink);border-radius:2px;padding:1rem 1.15rem;box-shadow:4px 4px 0 var(--shadow)}
+.run h2{font:700 1.05rem var(--serif);margin:0 0 .5rem}
+.run p{margin:.55rem 0 0;font-size:.95rem;max-width:36em}
+.pills{display:flex;flex-wrap:wrap;gap:.5rem;padding:1.2rem 0 .4rem}
+.pills a{border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:.3rem .85rem;border-radius:2px;text-decoration:none;font-size:.95rem}
+.pills a:hover{background:var(--mark);color:#14181D}
+.sec{padding:1.4rem 0 1rem}
+.sec h2{font:700 1.5rem/1.2 var(--serif);margin:0}
+.sec h3{font:700 1.05rem var(--serif);margin:1.4rem 0 .3rem}
+.lede{margin:.25rem 0 1rem;max-width:60ch;color:var(--muted)}
+.empty{border:1px dashed var(--ink);background:var(--panel);border-radius:2px;padding:1.1rem 1.2rem}
+.empty strong{display:block;font:700 1.05rem var(--serif)}
+.empty p{margin:.25rem 0 0;max-width:56ch;color:var(--muted)}
+.pair{display:grid;gap:1rem}
+.panel{background:var(--panel);border:1px solid var(--ink);border-radius:2px;padding:1rem 1.1rem}
+.panel h3{margin:0}
+.sub{margin:.1rem 0 .8rem;color:var(--muted);font-size:.92rem}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--ink)}
+th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--soft);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.9rem}
+code,.mono{font-family:var(--mono);font-size:.88rem}
+.facts{margin:0;background:var(--panel);border:1px solid var(--ink)}
+.facts div{display:grid;grid-template-columns:12rem minmax(0,1fr);gap:1rem;padding:.6rem .85rem;border-bottom:1px solid var(--soft)}
+.facts div:last-child{border-bottom:0}
+dt{color:var(--muted);font-weight:600;font-size:.92rem}
+dd{margin:0;overflow-wrap:anywhere}
+.tag{background:var(--signal);color:#fff;padding:.05rem .4rem;border-radius:2px;font-size:.8rem;font-weight:600}
+.todo{background:var(--mark);color:#14181D;border:1px solid #14181D;padding:0 .4rem;border-radius:2px;font-size:.8rem;margin-left:.4rem}
+li{margin:.3rem 0;max-width:68ch}
+@media (min-width:48rem){.pair{grid-template-columns:1fr 1fr}}
+@media (min-width:58rem){.hero{grid-template-columns:minmax(0,1fr) 19rem;align-items:start}.run{position:sticky;top:6.5rem}}
+@media (max-width:40rem){.facts div{grid-template-columns:1fr;gap:.1rem}}
+@media print{.bars,.run{position:static}.run{box-shadow:none}body{background:#fff;color:#000}}
 """
 
 
@@ -118,8 +167,48 @@ def render_rows(rows: list[dict]) -> str:
     body = "".join(
         f"<tr><td><code>{e(r['id'])}</code></td><td>{e(r['kind'])}</td><td>{e(r.get('agent') or '')}</td>"
         f"<td>{SYNTHETIC_TAG if is_synthetic(r) else ''}</td></tr>" for r in rows)
-    return ("<h2>Ledger rows loaded</h2><table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>"
+    return ("<h3>Ledger rows loaded</h3><table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>"
             f"{body}</table>")
+
+
+def render_ruler(cutoff: int) -> str:
+    """Figure 1: a year scale, the span the lab can read highlighted, later years hatched.
+
+    Built from the cutoff, so it moves if the cutoff changes. Inline SVG, no script, no network.
+    """
+    first, last = cutoff - 14, cutoff + 2                  # years shown: first .. last-1
+    pad, width = 8, 520
+    per = (width - 2 * pad) / (last - first)
+    x = lambda year: round(pad + (year - first) * per, 1)  # noqa: E731
+    cut = x(cutoff)
+    ticks = "".join(f'<line class="axis" x1="{x(y)}" y1="62" x2="{x(y)}" y2="68"/>' for y in range(first, last + 1))
+    labels = "".join(f'<text class="yr" x="{x(y)}" y="88" text-anchor="middle">{y}</text>'
+                     for y in range(first, last + 1) if y % 5 == 0 and y != cutoff)
+    title = (f"Timeline: the lab can read publications up to 31 December {cutoff - 1}. "
+             "Later publications are hidden from it.")
+    return (
+        f'<figure><svg class="ruler" viewBox="0 0 {width} 118" role="img" aria-labelledby="rt">'
+        f'<title id="rt">{e(title)}</title>'
+        '<defs><pattern id="hide" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
+        '<line class="hatch" x1="0" y1="0" x2="0" y2="6"/></pattern></defs>'
+        f'<rect class="read" x="{pad}" y="34" width="{round(cut - pad, 1)}" height="28"/>'
+        f'<rect class="hide" x="{cut}" y="34" width="{round(width - pad - cut, 1)}" height="28"/>'
+        f'<line class="axis" x1="{pad}" y1="62" x2="{width - pad}" y2="62"/>{ticks}'
+        f'<line class="cut" x1="{cut}" y1="22" x2="{cut}" y2="74"/>'
+        f'<text class="cutlab" x="{round(cut - 6, 1)}" y="17" text-anchor="end">31 Dec {cutoff - 1}</text>'
+        f'<text class="readtxt" x="{pad + 10}" y="54">The lab can read this</text>'
+        f'{labels}'
+        f'<text class="yr" x="{cut}" y="88" text-anchor="middle" font-weight="700">{cutoff}</text>'
+        f'<text class="cap" x="{width - pad}" y="110" text-anchor="end">Not available to the lab</text></svg>'
+        f"<figcaption>Figure 1. Evidence stops at 31 December {e(cutoff - 1)}. "
+        "Everything published later is hidden from the lab.</figcaption></figure>")
+
+
+def render_facts(prov: list[tuple[str, str]]) -> str:
+    def cell(key: str, value: str) -> str:
+        mono = ' class="mono"' if ("SHA-256" in key or "fingerprint" in key) else ""
+        return f"<div><dt>{e(key)}</dt><dd{mono}>{e(value)}</dd></div>"
+    return '<dl class="facts">' + "".join(cell(k, v) for k, v in prov) + "</dl>"
 
 
 def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html: str,
@@ -127,21 +216,35 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
     bars = f'<div class="bar banner" role="note">{e(BANNER)}</div>'
     if synthetic:
         bars += f'<div class="bar synthetic" role="alert">{e(SYNTHETIC)}</div>'
-    table = "".join(f"<tr><th>{e(k)}</th><td>{e(v)}</td></tr>" for k, v in prov)
+    saw = (render_rows(rows) if rows else
+           '<div class="empty"><strong>No run loaded</strong>'
+           "<p>Build the dashboard with a run's ledger rows to see its hypotheses, experiments and "
+           "verdicts here.</p></div>")
+    none = '<div class="empty"><strong>No run loaded</strong><p>Nothing to score for this analysis yet.</p></div>'
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Drug repurposing lab: replay dashboard</title><style>{CSS}</style></head>
 <body><header class="bars">{bars}</header>
+<div class="site"><span class="name">Drug repurposing lab</span>
+<span class="chips"><span class="chip">Cutoff {e(cutoff)}</span><span class="chip">{"Toy mode" if mode == "toy" else "Real data"}</span></span></div>
 <main>
-<h1>Drug repurposing lab</h1>
-<p class="q">{e(QUESTION)}</p>
-<h2>Results, ranking and reasoning trail</h2>
-<div class="pending">Not available yet. These sections are added once real runs exist for both analyses.</div>
-{render_rows(rows) if rows else ''}
-<h2>Provenance</h2>
-<table>{table}</table>
-<h2>Limitations</h2>
-{limitations_html}
+<section class="hero">
+<div><h1>{e(QUESTION)}</h1>{render_ruler(cutoff)}</div>
+<aside class="run" aria-label="How to read this page"><h2>How to read this page</h2>
+<p>The lab never saw drug names. The first view shows what it saw.</p>
+<p>The second view scores the result afterwards. It is the only place the answer is shown.</p>
+<p>Everything here is a hypothesis for laboratory validation, not advice.</p></aside>
+</section>
+<nav class="pills" aria-label="Sections"><a href="#saw">What the lab saw</a><a href="#scored">How it scored afterwards</a><a href="#provenance">Provenance</a><a href="#limits">Limitations</a></nav>
+<section class="sec" id="saw"><h2>What the lab saw</h2>
+<p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
+<section class="sec" id="scored"><h2>How it scored afterwards</h2>
+<p class="lede">Both analyses are reported, whatever they show. Real names and the target highlight appear only here.</p>
+<div class="pair">
+<div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{none}</div>
+<div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{none}</div></div></section>
+<section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
+<section class="sec" id="limits"><h2>Limitations</h2>{limitations_html}</section>
 </main></body></html>
 """
 

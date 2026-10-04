@@ -145,3 +145,29 @@ def test_malformed_rows_fail_loudly(tmp_path):
         dash.build(tmp_path / "i.html", "toy", rows=[{"kind": "result"}])
     with pytest.raises(ValueError, match="id and a kind"):
         dash.build(tmp_path / "i.html", "toy", rows=["not a row"])
+
+
+def test_cutoff_ruler_follows_the_cutoff_year(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy", cutoff=2013))
+    assert "31 Dec 2012" in page and "Evidence stops at 31 December 2012" in page
+    assert "31 Dec 2014" not in page and "Cutoff 2013" in page
+
+
+def test_ruler_is_an_accessible_offline_image(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy"))
+    svg = re.search(r"<svg.*?</svg>", page, re.S).group(0)
+    assert 'role="img"' in svg and "<title" in svg and "xmlns" not in svg and "http" not in svg
+
+
+def test_section_links_point_at_real_sections(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy"))
+    links = re.findall(r'<a href="#(\w+)"', page)
+    assert links == ["saw", "scored", "provenance", "limits"]
+    assert all(f'id="{name}"' in page for name in links)
+
+
+def test_both_analyses_get_a_panel_with_a_plain_empty_state(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy"))
+    assert "Analysis 1" in page and "Analysis 2" in page
+    assert page.count("No run loaded") == 3                      # masked view plus both analysis panels
+    assert "sorry" not in page.lower()
