@@ -162,6 +162,9 @@ tools:
       predicted_direction ("enriched" or "not_enriched": what methods A and B should measure for
       those gene sets if the claim is true) OR testable: false when methods A and B cannot test it.
       write_ledger rejects a testable hypothesis without gene_set_ids and predicted_direction.
+      find_gene_set applies a fixed rule: MSigDB c2.cp sets whose name contains every word of your
+      term, written as pathway names write it (for example "IL-6", "JAK-STAT", "VEGF"). No synonyms.
+      If it returns no gene sets, the hypothesis is not testable by methods A and B: set testable: false.
       The "agent-generated" label is added automatically.
       Include at least one hypothesis that contradicts the leading one.
       Use only evidence you can read with read_evidence. If asked to revise after a contested result,

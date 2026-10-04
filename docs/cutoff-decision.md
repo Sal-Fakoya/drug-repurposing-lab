@@ -254,3 +254,73 @@ what any individual did.
 - Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
 - Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
 - Decided on ________ by ________ and ________.
+
+## Amendment, 2026-10-04: feasibility check, analysis roles, gene-set rule
+
+Recorded before any lab run on real data and before any drug masking exists.
+
+### Disclosure: what we looked at before the run
+
+On 2026-10-04 Sal Fakoya, working with Claude Code, inspected the real data layer: the ChEMBL 19
+and MSigDB v4.0 snapshot for cutoff 2015 (`lab.snapshot`, sha256 `57be32ea9e0064f44bc1ae5ed582380880937d046b9169ee237ea09305d3804a`;
+pool 1146 drugs, 3779 curated and 5516 curated+activity links). We therefore know these facts
+about the target before the replay:
+
+- Sirolimus (CHEMBL413) is in the 1146-drug pool. Its curated target is FKBP1A (P62942) only.
+  Under curated+activity it also links to MTOR (P42345), EIF4E (P06730) and FKBP5 (Q13451).
+- Tocilizumab: IL6R (P08887). Siltuximab: IL6 (P05231). Both are the same under both definitions.
+- Five pool drugs have FKBP1A as their only curated target: sirolimus, everolimus, temsirolimus,
+  tacrolimus, pimecrolimus.
+- MSigDB v4.0 c2.cp sets containing MTOR / FKBP1A / IL6: 58 / 11 / 37 (103 distinct sets).
+- Method A scored on each of those sets alone, over the whole pool (not a lab run):
+  - curated: sirolimus scores only through the 11 FKBP1A sets, at best mid-rank 3.0 in a five-way
+    tie with the four drugs above, and about mid-rank 574 (tied with nearly the whole pool) in
+    every MTOR-only or IL6 set;
+  - curated+activity: rank 1, untied, in BIOCARTA_MTOR_PATHWAY and several mTOR and PI3K sets.
+
+### Analysis roles: unchanged
+
+The curated definition stays the primary analysis (Analysis 1) and curated plus activity
+<= 1000 nM stays the sensitivity analysis (Analysis 2). Both are run and reported whatever they
+show. Neither the roles nor the definitions were changed after seeing the facts above.
+
+### Pre-specified rule for mapping hypothesis terms to gene sets
+
+`find_gene_set(term, cutoff_year)` maps a term to MSigDB v4.0 c2.cp gene sets with this rule
+(`lab.msigdb`, `RULE_VERSION = "c2cp-name-tokens-v1"`), applied identically to every term, whether
+it comes from the configuration or from an agent:
+
+1. Normalise the term and each set name the same way: upper-case, split on every character that
+   is not a letter or digit, and join a letter-only token with a following number-only token
+   ("IL-6" and `REACTOME_IL_6_...` both give IL6). From set names, drop the source prefix (the
+   text before the first underscore, such as BIOCARTA or KEGG).
+2. Drop these words from both: SIGNALING, SIGNALLING, SIGNAL, PATHWAY, PATHWAYS, THE, OF, AND, BY,
+   VIA, IN.
+3. A set matches when every remaining term token is one of the set name's tokens. Only sets with
+   at least one gene mapped to a UniProt accession (the snapshot's sets) are candidates.
+4. The result is the sorted list of matching sets. A term with no tokens matches nothing. No
+   synonyms, no fuzzy matching, no manual additions or removals. If nothing matches, the
+   hypothesis is not testable by methods A and B and must say `testable: false`.
+
+The rule was written after the feasibility check above, so its effect on the target is
+disclosed here: the configured terms map as follows.
+
+- "IL-6 signaling": BIOCARTA_IL6_PATHWAY, PID_IL6_7PATHWAY, REACTOME_IL_6_SIGNALING.
+- "jak-stat signaling": KEGG_JAK_STAT_SIGNALING_PATHWAY, ST_JAK_STAT_PATHWAY.
+- "vegf signaling": BIOCARTA_VEGF_PATHWAY, KEGG_VEGF_SIGNALING_PATHWAY, PID_VEGF_VEGFR_PATHWAY,
+  REACTOME_VEGF_LIGAND_RECEPTOR_INTERACTIONS.
+- "mtor signaling": BIOCARTA_MTOR_PATHWAY, KEGG_MTOR_SIGNALING_PATHWAY, PID_MTOR_4PATHWAY,
+  REACTOME_ENERGY_DEPENDENT_REGULATION_OF_MTOR_BY_LKB1_AMPK.
+
+BIOCARTA_MTOR_PATHWAY contains FKBP1A. So under the primary (curated) definition, an mTOR
+hypothesis can reach the five FKBP1A drugs, sirolimus among them, as a tie. The rule was not
+adjusted to add or remove that set.
+
+One configuration term was changed to fit the rule: `experiments/config/real.json`
+"interleukin-6 signaling" became "IL-6 signaling", because the rule does not match spelled-out
+names. The other three terms already matched and are unchanged.
+
+### Masking
+
+No drug mask has been created yet. When it is, the target's masked id stays in
+`data/eval_only/` and is not printed or recorded anywhere else.

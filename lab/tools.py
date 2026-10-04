@@ -133,11 +133,19 @@ def read_evidence(evidence_id: str) -> dict:
 
 
 def find_gene_set(term: str, cutoff_year: int) -> dict:
-    """Resolve a pathway or process term to gene_set_ids. Real mode: query dated pathway data."""
-    if MODE != "toy":
-        raise NotImplementedError("Wire to dated pathway snapshots (Thierry).")
-    gs = toy_data.TERM_TO_GENE_SET.get(term.lower().strip(), "GS_NULL")
-    return {"gene_set_ids": [gs]}
+    """Resolve a pathway or process term to gene_set_ids.
+
+    Real mode applies the pre-specified rule in lab.msigdb (RULE_VERSION, fixed in
+    docs/cutoff-decision.md): MSigDB v4.0 c2.cp sets whose name contains every token of the
+    term, from the hash-checked snapshot for cutoff_year. An empty list means no c2.cp set
+    matches, so the hypothesis is not testable by methods A and B.
+    """
+    if MODE == "toy":
+        gs = toy_data.TERM_TO_GENE_SET.get(term.lower().strip(), "GS_NULL")
+        return {"gene_set_ids": [gs]}
+    from lab import msigdb, snapshot  # real data only; keeps toy mode free of the snapshot
+    names = snapshot.load(int(cutoff_year)).gene_sets[msigdb.RULE_COLLECTION]
+    return {"gene_set_ids": msigdb.match_term(term, names), "rule": msigdb.RULE_VERSION}
 
 
 # ---------- ledger ----------

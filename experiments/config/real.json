@@ -3,7 +3,7 @@
   "query": "idiopathic multicentric Castleman disease",
   "k": 2,
   "initial": [
-    {"claim": "IL-6 signalling drives the disease", "term": "interleukin-6 signaling", "confidence": 0.7, "predicted_direction": "enriched"},
+    {"claim": "IL-6 signalling drives the disease", "term": "IL-6 signaling", "confidence": 0.7, "predicted_direction": "enriched"},
     {"claim": "JAK-STAT signalling drives the disease", "term": "jak-stat signaling", "confidence": 0.4, "predicted_direction": "enriched"},
     {"claim": "VEGF-driven angiogenesis drives the disease", "term": "vegf signaling", "confidence": 0.3, "predicted_direction": "enriched"}
   ],
