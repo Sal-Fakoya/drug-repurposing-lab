@@ -1,5 +1,6 @@
 """Masking: opaque, unordered, one-to-one, fail-closed, and the secret stays out of git."""
 import json
+import os
 import re
 from pathlib import Path
 
@@ -93,11 +94,15 @@ def test_target_must_be_in_the_pool(tmp_path):
         masking.init(["CHEMBL1"], {}, "CHEMBL9", "h", tmp_path, "s")
 
 
-def test_files_are_owner_only_and_fingerprint_hides_the_salt(tmp_path):
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not enforce Unix mode bits")
+def test_files_and_folder_are_owner_only(tmp_path):
     _init(tmp_path)
     assert tmp_path.stat().st_mode & 0o077 == 0
     for f in ("mask.json", "names.json", "target.json"):
         assert (tmp_path / f).stat().st_mode & 0o077 == 0
+
+
+def test_fingerprint_hides_the_salt():
     fp = masking.fingerprint("test-salt")
     assert re.fullmatch(r"[0-9a-f]{8}", fp) and "test-salt" not in fp
 
@@ -116,3 +121,79 @@ def test_init_from_snapshot_finds_target_by_name_not_by_typed_id(tmp_path):
 def test_eval_only_folder_is_git_ignored():
     root = Path(masking.__file__).resolve().parent.parent
     assert "data/eval_only/" in (root / ".gitignore").read_text().splitlines()
+
+
+# ---- restore: a second machine gets the same ids from the same mask.json ----
+
+def _conn_with_target():
+    conn = _db()
+    conn.execute("UPDATE molecule_dictionary SET pref_name = 'sirolimus' WHERE chembl_id = 'CHEMBL1'")
+    return conn
+
+
+def _sender_and_receiver(tmp_path, receiver_drugs=("CHEMBL1", "CHEMBL4")):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    masking.init_from_snapshot(snap, _conn_with_target(), tmp_path / "A", salt="shared-salt")
+    (tmp_path / "B").mkdir()
+    (tmp_path / "B" / "mask.json").write_bytes((tmp_path / "A" / "mask.json").read_bytes())
+    return snap, _snap(drugs=receiver_drugs)
+
+
+def test_restore_gives_the_receiver_identical_ids_without_touching_the_salt(tmp_path):
+    _, snap_b = _sender_and_receiver(tmp_path)
+    before = (tmp_path / "B" / "mask.json").read_bytes()
+    fp = masking.restore_from_snapshot(snap_b, _conn_with_target(), tmp_path / "B")
+    a, b = masking.load(tmp_path / "A"), masking.load(tmp_path / "B")
+    assert (tmp_path / "B" / "mask.json").read_bytes() == before                # salt never changes
+    assert fp == a.fingerprint == b.fingerprint
+    assert [b.mask(d) for d in ("CHEMBL1", "CHEMBL4")] == [a.mask(d) for d in ("CHEMBL1", "CHEMBL4")]
+    assert b.target_masked_id == a.target_masked_id and b.names == a.names
+
+
+def test_restore_refuses_a_mask_made_for_a_different_snapshot_and_writes_nothing(tmp_path):
+    _, other = _sender_and_receiver(tmp_path, receiver_drugs=("CHEMBL1", "CHEMBL3"))
+    with pytest.raises(ValueError, match="does not match this snapshot"):
+        masking.restore_from_snapshot(other, _conn_with_target(), tmp_path / "B")
+    assert sorted(p.name for p in (tmp_path / "B").iterdir()) == ["mask.json"]
+
+
+def test_restore_refuses_a_corrupted_mask(tmp_path):
+    _, snap_b = _sender_and_receiver(tmp_path)
+    m = json.loads((tmp_path / "B" / "mask.json").read_text())
+    m["salt"] = "someone-elses-salt"
+    (tmp_path / "B" / "mask.json").write_text(json.dumps(m))
+    with pytest.raises(ValueError, match="does not match this snapshot"):
+        masking.restore_from_snapshot(snap_b, _conn_with_target(), tmp_path / "B")
+
+
+def test_restore_will_not_overwrite_without_force(tmp_path):
+    _, snap_b = _sender_and_receiver(tmp_path)
+    masking.restore_from_snapshot(snap_b, _conn_with_target(), tmp_path / "B")
+    with pytest.raises(FileExistsError, match="--force"):
+        masking.restore_from_snapshot(snap_b, _conn_with_target(), tmp_path / "B")
+    masking.restore_from_snapshot(snap_b, _conn_with_target(), tmp_path / "B", force=True)
+
+
+def test_restore_without_mask_json_says_not_to_run_init(tmp_path):
+    with pytest.raises(FileNotFoundError, match="do NOT run init"):
+        masking.restore_from_snapshot(_snap(), _conn_with_target(), tmp_path / "empty")
+
+
+def test_command_line_restore_prints_the_fingerprint_but_never_the_salt(tmp_path, monkeypatch, capsys):
+    _, snap_b = _sender_and_receiver(tmp_path)
+    monkeypatch.setattr(masking, "EVAL_DIR", tmp_path / "B")
+    monkeypatch.setattr(masking.snapshot_mod, "load", lambda: snap_b)
+    monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
+    masking.main(["restore"])
+    out = capsys.readouterr().out
+    assert masking.fingerprint("shared-salt") in out and "shared-salt" not in out
+    assert masking.load(tmp_path / "B").target_chembl_id == "CHEMBL1"
+
+
+def test_command_line_init_still_refuses_to_replace_an_existing_mask(tmp_path, monkeypatch):
+    snap, _ = _sender_and_receiver(tmp_path)
+    monkeypatch.setattr(masking, "EVAL_DIR", tmp_path / "A")
+    monkeypatch.setattr(masking.snapshot_mod, "load", lambda: snap)
+    monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
+    with pytest.raises(FileExistsError):
+        masking.main(["init"])
