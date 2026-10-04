@@ -215,11 +215,12 @@ def render_facts(prov: list[tuple[str, str]]) -> str:
 
 
 def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html: str,
-           synthetic: bool, rows: list[dict] | None = None) -> str:
+           synthetic: bool, rows: list[dict] | None = None,
+           trail: str = "", scored: tuple[str, str] | None = None) -> str:
     bars = f'<div class="bar banner" role="note">{e(BANNER)}</div>'
     if synthetic:
         bars += f'<div class="bar synthetic" role="alert">{e(SYNTHETIC)}</div>'
-    saw = (render_rows(rows) if rows else
+    saw = (trail + render_rows(rows) if rows else
            '<div class="empty"><strong>No run loaded</strong>'
            "<p>Build the dashboard with a run's ledger rows to see its hypotheses, experiments and "
            "verdicts here.</p></div>")
@@ -244,8 +245,8 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <section class="sec" id="scored"><h2>How it scored afterwards</h2>
 <p class="lede">Both analyses are reported, whatever they show. Real names and the target highlight appear only here.</p>
 <div class="pair">
-<div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{none}</div>
-<div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{none}</div></div></section>
+<div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{scored[0] if scored else none}</div>
+<div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{scored[1] if scored else none}</div></div></section>
 <section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
 <section class="sec" id="limits"><h2>Limitations</h2>{limitations_html}</section>
 </main>
@@ -254,7 +255,7 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 
 
 def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEAR,
-          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, limitations_path: Path = LIMITATIONS,
+          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, trail: str = "", scored=None, limitations_path: Path = LIMITATIONS,
           eval_dir: Path | None = None, rows: list[dict] | None = None) -> Path:
     mode = mode or lab.MODE
     if mode == "real" and eval_dir is None:
@@ -270,7 +271,8 @@ def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEA
               file=sys.stderr)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows),
+    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows,
+                          trail=trail, scored=scored),
                    encoding="utf-8")
     return out
 

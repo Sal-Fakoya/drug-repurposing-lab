@@ -189,3 +189,20 @@ def test_attribution_footer_and_no_gene_lists_on_the_page(tmp_path):
     genes |= {g for _, g in snap.links["curated+activity"]}
     assert genes and not [g for g in genes if g in page]
     assert not [n for sets in snap.gene_sets.values() for n in sets if n in page]
+
+
+def test_make_index_shows_trail_and_target_rank_but_no_payload_secrets():
+    spec = importlib.util.spec_from_file_location("make_index", ROOT / "dashboard" / "make_index.py")
+    mi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mi)
+    rows = [
+        {"id": "hyp_001", "kind": "hypothesis", "payload": {"claim": "<b>IL-6</b> drives it", "confidence": 0.5}},
+        {"id": "exp_001", "kind": "experiment_spec", "payload": {"hyp_id": "hyp_001", "method": "A"}},
+        {"id": "res_001", "kind": "result", "payload": {"exp_id": "exp_001", "ranked_drugs": [{}, {}, {}]}},
+        {"id": "ver_001", "kind": "verdict", "payload": {"hyp_id": "hyp_001", "verdict": "supported", "z": "3.2"}},
+    ]
+    ev = [{"res_id": "res_001", "target_drug_rank": 2.0}]
+    trail, (a1, a2) = mi.trail_html(rows), mi.scored_html(rows, ev, "curated")
+    assert "&lt;b&gt;IL-6" in trail and "supported (z=3.2)" in trail
+    assert "2 of 3" in a1 and "Not run in this build" in a2
+    assert "Not run in this build" in mi.scored_html(rows, ev, "curated+activity")[0]
