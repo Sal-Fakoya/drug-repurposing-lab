@@ -42,21 +42,17 @@ def trail_html(rows):
 def scored_html(rows, eval_rows, definition):
     ranks = {r["res_id"]: r["target_drug_rank"] for r in eval_rows}
     specs = {r["id"]: r["payload"] for r in rows if r["kind"] == "experiment_spec"}
-    lines, vals = "", []
+    vals = []
     for r in rows:
         if r["kind"] != "result" or r["id"] not in ranks:
             continue
         s = specs.get(r["payload"]["exp_id"], {})
-        n = len(r["payload"]["ranked_drugs"])
         control = s.get("hyp_id") == "negative_control"
         if not control:
             vals.append(ranks[r["id"]])
-        lines += (f"<tr><td><code>{e(r['id'])}</code></td><td>{e(s.get('hyp_id'))}</td><td>{e(s.get('method'))}</td>"
-                  f"<td>{ranks[r['id']]:g} of {n}</td><td>{'negative control' if control else ''}</td></tr>")
     top = (f"<p>Target mid-rank, best <strong>{min(vals):g}</strong>, median <strong>{statistics.median(vals):g}</strong> "
            "across hypothesis experiments (rank 1 is best; ties share a mid-rank).</p>") if vals else ""
-    one = (f"{top}<table><tr><th>result</th><th>hypothesis</th><th>method</th><th>target mid-rank</th><th></th></tr>"
-           f"{lines}</table><p class=\"sub\">Drug names are not shown on this page. "
+    one = (f"{top}<p class=\"sub\">One dot per result is in the chart above. Drug names are not shown on this page. "
            f"Link definition: {e(definition)}. One run, one seed, not replicated.</p>")
     other = '<div class="empty"><strong>Not run in this build</strong><p>Reported as not run, not omitted.</p></div>'
     return (one, other) if definition == "curated" else (other, one)
@@ -70,7 +66,7 @@ def headline_html(rows, eval_rows):
     if not res:
         return ""
     n = len(res[0]["payload"]["ranked_drugs"])
-    x0, x1, step = 70, 620, 15
+    x0, x1, step = 70, 620, 18
     px = lambda v: x0 + (v - 1) / (n - 1) * (x1 - x0)  # noqa: E731
     h = 40 + step * len(res)
     best = min(ranks[r["id"]] for r in res)

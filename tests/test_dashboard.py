@@ -205,7 +205,7 @@ def test_make_index_shows_trail_and_target_rank_but_no_payload_secrets():
     ev = [{"res_id": "res_001", "target_drug_rank": 2.0}]
     trail, (a1, a2) = mi.trail_html(rows), mi.scored_html(rows, ev, "curated")
     assert "&lt;b&gt;IL-6" in trail and "supported (z=3.2)" in trail
-    assert "2 of 3" in a1 and "Not run in this build" in a2
+    assert "<strong>2</strong>" in a1 and "Not run in this build" in a2
     assert "Not run in this build" in mi.scored_html(rows, ev, "curated+activity")[0]
 
 
