@@ -13,4 +13,5 @@ data/raw/
 *.tar.gz
 data/*_records*.tsv
 data/eval_only/
+data/snapshots/
 dashboard/out/
