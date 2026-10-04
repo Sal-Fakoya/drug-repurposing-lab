@@ -72,18 +72,32 @@ Verified from public sources:
 - ChEMBL 19 is dated July 2014 in ChEMBL's release list. The ChEMBL 20 FTP folder is dated
   2015-02-02, so ChEMBL 19 is the last release before the cutoff and ChEMBL 20 must NOT be used.
 - ChEMBL has provided SQLite builds since release 19, and has since built them for all releases.
-- MSigDB v5.0 support was added to GSEA in June 2015, so v5.0 is after the cutoff.
-  v4.0 is most likely the last release before it (date not directly verified).
+- MSigDB, verified on Broad's archived downloads page: v3.1 September 2012, v4.0 May 2013,
+  v5.0 April 2015 (v5.1 January 2016). v5.0 is after the cutoff, so v4.0 is the last release
+  before it and is the pin. (GSEA software support for v5.0 came in June 2015, also after.)
 - Open Targets: not usable, no release before 2016.
 
 To confirm and record (fill in):
-- [ ] The chembl_19 FTP folder exists and the file names are as expected: ________
-- [ ] `SELECT * FROM version` in the downloaded database says ChEMBL_19.
-- [ ] Sirolimus is in the pool (max_phase 4) and links to mTOR (UniProt P42345).
-- [ ] Siltuximab and tocilizumab are present and link to IL-6 and IL-6R.
-- [ ] Pool definition and size N: ________ (see data/README.md)
-- [ ] Pathway gene sets from MSigDB version ________ (archive page checked, license accepted).
-- [ ] mTOR and IL-6 gene sets exist in that release: set names ________
+- [x] The chembl_19 FTP folder exists and the file names are as expected: `ChEMBLdb/releases/chembl_19/`
+      lists `chembl_19_sqlite.tar.gz` (2,471,647,673 bytes, SHA-256
+      984bc5c4d50a6424d5f2452bb809a50d1249bbb73b07eb70f3655b6827c5120f). EBI publishes no
+      checksum for this release, so the hash is pinned in `setup_data.py` from our first download.
+- [x] `SELECT * FROM version` in the downloaded database says ChEMBL_19 (created 2014-07-03).
+- [x] Sirolimus is in the pool (max_phase 4). It links to mTOR (UniProt P42345) only under Analysis 2
+      (recorded activity). Its curated link (Analysis 1) is FKBP1A (P62942) only.
+- [x] Siltuximab and tocilizumab are present and link to IL-6 (P05231) and IL-6R (P08887), curated.
+- [x] Pool definition and size N: `lab.chembl.POOL_DEFINITION`: approved (max_phase 4) parent
+      molecules with at least one human target (curated link, matched by UniProt accession).
+      N = 1146 (of 1885 approved parents). The same pool is used for both analyses; Analysis 2
+      adds targets to these drugs, never drugs (amendment of 2026-10-04, see "ChEMBL 19 pin").
+      Drug-target pairs in the pool: 3779 curated, 5516 with Analysis 2.
+- [ ] Pathway gene sets from MSigDB v4.0 (May 2013), downloaded 2026-10-04 from Broad's archived
+      downloads page, `msigdb_v4.0_files_to_download_locally.zip`, SHA-256
+      8b4096da2b979ebd474cadb3e72b1528388578acc5adde062ec2b45435c523fe.
+      Licence accepted: ________ (Thierry to confirm).
+- [x] mTOR and IL-6 gene sets exist in that release (collection `c2.cp`): BIOCARTA_MTOR_PATHWAY,
+      KEGG_MTOR_SIGNALING_PATHWAY, PID_MTOR_4PATHWAY, REACTOME_MTORC1_MEDIATED_SIGNALLING;
+      BIOCARTA_IL6_PATHWAY, PID_IL6_7PATHWAY. The full list is fixed by the term rule below.
 - [ ] Every source and what could still leak is recorded in LIMITATIONS.md.
 
 ## Suggested research question at this cutoff
@@ -103,13 +117,14 @@ what any individual did.
   anakinra, rituximab, thalidomide.
 - Curated targets: siltuximab -> IL6 (P05231), tocilizumab -> IL6R (P08887), anakinra -> IL1R1
   (P14778). Sirolimus, everolimus and temsirolimus -> FKBP1A (P62942), "FK506-binding protein 1A
-  inhibitor". No mTOR (P42345) link appears in the curated mechanism or in the potent-activity
-  fallback (document year up to 2014).
+  inhibitor". No mTOR (P42345) link appears in the curated mechanism. The potent-activity fallback
+  does link sirolimus to mTOR once targets are matched by UniProt accession (target CHEMBL2842 is
+  named "FK506 binding protein 12" but carries P42345); see "ChEMBL 19 pin" below.
 - Consequence: sirolimus can reach an mTOR hypothesis only if a gene set from the pre-cutoff
   pathway source contains FKBP1A. Gene sets must NOT be edited by hand to create the link.
   If no link exists, report it as a limitation of this data layer.
-- Still to fill in: MSigDB version ________; FKBP1A present in mTOR sets: ________;
-  results of scripts/check_chembl_mtor.sql: ________.
+- MSigDB version and the FKBP1A result: see "MSigDB v4.0 pin" below. Results of
+  scripts/check_chembl_mtor.sql: see "ChEMBL 19 pin" below.
 
 ## Bridge evidence (abstracts read)
 
@@ -153,15 +168,72 @@ what any individual did.
 - Approved molecules with curated target FKBP1A (they tie under a gene set containing it):
   everolimus, pimecrolimus, sirolimus, tacrolimus, temsirolimus.
 
+## MSigDB v4.0 pin (May 2013)
+
+- Source and hash: see the checklist above.
+- **Collection: `c2.cp` (canonical pathways) only** (1320 sets in the file, 1302 after mapping).
+  `c2.all` is excluded on purpose: its chemical and genetic perturbation sets include
+  drug-treatment signatures (for example rapamycin response), which would leak drug identity
+  through set membership. The snapshot also contains `c2.all`, but no hypothesis may use it.
+  (Sal, 2026-10-04.)
+- FKBP1A (P62942) is in 11 `c2.cp` sets, mostly NFAT, TGF-beta and T-cell calcium signalling. Of the
+  mTOR sets, only BIOCARTA_MTOR_PATHWAY (23 genes, also contains MTOR) has it. It is absent from
+  KEGG_MTOR_SIGNALING_PATHWAY, PID_MTOR_4PATHWAY, BIOCARTA_IGF1MTOR_PATHWAY and
+  REACTOME_MTORC1_MEDIATED_SIGNALLING.
+- So Analysis 1 reaches sirolimus only through a gene set that contains FKBP1A, and which mTOR set
+  a hypothesis resolves to decides whether it does. This is a known property of the data, not
+  something to engineer around.
+- Neither IL-6 set (BIOCARTA_IL6_PATHWAY, PID_IL6_7PATHWAY) contains FKBP1A or MTOR: the IL-6 to
+  mTOR link has to come from the literature bridge.
+- Term to gene set is a mechanical rule, not a hand-picked list: every `c2.cp` set whose name
+  contains MTOR, IL6, JAK_STAT or VEGF (rule and resulting list drafted by Sal, committed
+  separately). Order of events, for the record: FKBP1A membership was observed on 2026-10-04 while
+  pinning MSigDB, before this rule was written. The rule keys on names only and applies to every
+  term, so it does not choose sets by drug membership, but the result was known when it was drafted.
+- Symbol to UniProt mapping uses ChEMBL 19's own `component_synonyms` (July 2014), implemented in
+  `lab/msigdb.py`: a symbol with one accession maps to it; an ambiguous symbol (an alias of several
+  genes) is excluded and counted; a symbol ChEMBL does not know is dropped and counted. In `c2.cp`
+  55% of gene slots are unmapped (35724 of 64505) and 352 are ambiguous, because ChEMBL only
+  knows proteins that are compound targets. No ChEMBL drug can hit a dropped gene, so dropping
+  matches what drugs can target, but it shrinks gene sets and the hypergeometric universe. Sal
+  reviewed this rule on 2026-10-04: no objection.
+- Gene set sizes under the rule, before -> after mapping (symbols -> mapped). Sets with fewer than
+  10 mapped genes are flagged TINY: their p-values are coarse. No minimum size is pre-registered,
+  so tiny sets are kept and only flagged. Regenerate from `gene_set_report_c2.cp.json` in the
+  snapshot once the rule is committed.
+  - name contains MTOR (6 sets; contain FKBP1A: BIOCARTA_MTOR_PATHWAY):
+      BIOCARTA_IGF1MTOR_PATHWAY: 20 -> 14
+      BIOCARTA_MTOR_PATHWAY: 23 -> 13
+      KEGG_MTOR_SIGNALING_PATHWAY: 52 -> 34
+      PID_MTOR_4PATHWAY: 69 -> 38
+      REACTOME_ENERGY_DEPENDENT_REGULATION_OF_MTOR_BY_LKB1_AMPK: 18 -> 12
+      REACTOME_MTORC1_MEDIATED_SIGNALLING: 11 -> 6 (TINY)
+  - name contains IL6 (2 sets; contain FKBP1A: none):
+      BIOCARTA_IL6_PATHWAY: 22 -> 20
+      PID_IL6_7PATHWAY: 47 -> 32
+  - name contains JAK_STAT (2 sets; contain FKBP1A: none):
+      KEGG_JAK_STAT_SIGNALING_PATHWAY: 155 -> 55
+      ST_JAK_STAT_PATHWAY: 9 -> 5 (TINY)
+  - name contains VEGF (6 sets; contain FKBP1A: none):
+      BIOCARTA_VEGF_PATHWAY: 29 -> 20
+      KEGG_VEGF_SIGNALING_PATHWAY: 76 -> 59
+      PID_VEGFR1_2_PATHWAY: 69 -> 52
+      PID_VEGFR1_PATHWAY: 26 -> 19
+      PID_VEGF_VEGFR_PATHWAY: 10 -> 6 (TINY)
+      REACTOME_VEGF_LIGAND_RECEPTOR_INTERACTIONS: 10 -> 5 (TINY)
+
 ## Pre-registered drug-target link definitions (fixed before the lab runs on real data)
 
 - Analysis 1 (primary): a drug links to a gene if ChEMBL lists it as a curated mechanism target.
 - Analysis 2 (sensitivity, reported alongside): curated targets plus human targets with a recorded
-  IC50, Ki or Kd of 1000 nM or less in a document dated before the cutoff.
+  IC50, Ki or Kd of 1000 nM or less in a document dated before the cutoff. Only activity
+  relations `=`, `<` and `<=` count: a `>` relation or a missing relation does not show a value
+  of 1000 nM or less. Documents with no year are excluded. Human targets, matched by UniProt
+  accession, salts collapsed to the parent molecule.
 - Both rules apply identically to every drug. Gene sets are never edited by hand. Both analyses
   are reported whatever they show. The primary was chosen knowing that sirolimus links to mTOR
   only under Analysis 2.
-- Still to fill in: MSigDB version ________; FKBP1A present in the mTOR gene sets: ________.
+- MSigDB version and the FKBP1A result: see "MSigDB v4.0 pin" above.
 
 ## Bridge evidence (abstracts read)
 
