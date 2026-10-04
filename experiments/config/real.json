@@ -1,5 +1,5 @@
 {
-  "description": "Real replay, cutoff from lab.CUTOFF_YEAR. Set LAB_TARGET_DRUG to the masked id of the target. Terms are resolved by find_gene_set against the dated pathway snapshot. Confirm these terms before the first real run and do not change them after seeing results.",
+  "description": "Real replay, cutoff from lab.CUTOFF_YEAR. The target is read from the eval-only target.json (run `python -m lab.masking` first); LAB_LINK_DEFINITION picks curated (default) or curated+activity. Terms are resolved by find_gene_set against the dated pathway snapshot. Confirm these terms before the first real run and do not change them after seeing results.",
   "query": "idiopathic multicentric Castleman disease",
   "k": 2,
   "initial": [

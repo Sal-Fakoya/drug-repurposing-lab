@@ -1,18 +1,43 @@
 """Scoring methods A (pathway enrichment) and B (literature graph). Names never enter here.
 
-Everything works on opaque drug ids (d001...) and gene set ids. Real-data loaders are
-Thierry's task: replace the _require_toy() branches with reads from the Delta snapshots.
+Everything works on opaque drug ids (d001... in toy mode, m_... in real mode) and gene set ids.
+
+Real mode (LAB_MODE=real) reads the hash-checked snapshot (lab.snapshot) and the eval-only mask
+(lab.masking): the pool is the snapshot pool under the link definition LAB_LINK_DEFINITION
+("curated", the primary analysis, or "curated+activity", the sensitivity analysis), with masked
+ids, and gene sets are the snapshot's c2.cp sets. Method B and the literature co-occurrence
+baseline still need a dated Europe PMC co-mention snapshot, which does not exist yet.
 """
+import functools
 import hashlib
 import math
 import os
 
-from lab import MODE, ledger, toy_data
+from lab import CUTOFF_YEAR, MODE, ledger, toy_data
+
+LINK_DEFINITIONS = ("curated", "curated+activity")
 
 
 def _require_toy() -> None:
     if MODE != "toy":
-        raise NotImplementedError("Real loaders are not wired yet. See data/README.md.")
+        raise NotImplementedError("Real mode has no dated Europe PMC co-mention snapshot yet, so "
+                                  "method B and the co-occurrence baseline cannot run. "
+                                  "See data/README.md.")
+
+
+def link_definition() -> str:
+    """Drug-target link definition for real mode, read live (LAB_LINK_DEFINITION)."""
+    d = os.environ.get("LAB_LINK_DEFINITION", "curated")
+    if d not in LINK_DEFINITIONS:
+        raise ValueError(f"LAB_LINK_DEFINITION must be one of {LINK_DEFINITIONS}, got {d!r}")
+    return d
+
+
+@functools.lru_cache(maxsize=4)
+def _real(cutoff_year: int):
+    """(snapshot, mask) for real mode. Cached: loading re-hashes every snapshot file."""
+    from lab import masking, snapshot  # real data only; keeps toy mode free of both
+    return snapshot.load(int(cutoff_year)), masking.load()
 
 
 def seed() -> int:
@@ -21,13 +46,27 @@ def seed() -> int:
 
 def masked_drug_pool(cutoff_year: int) -> list[dict]:
     """Opaque drug ids with their targets. No names."""
-    _require_toy()
+    if MODE != "toy":
+        snap, mask = _real(cutoff_year)
+        return mask.masked_pool(snap, link_definition())
     drugs, _ = toy_data.build()
     return [{"drug_id": d, "targets": t} for d, t in sorted(drugs.items())]
 
 
-def _gene_union(gene_set_ids: list[str]) -> set[str]:
+def _gene_union(gene_set_ids: list[str], cutoff_year: int = CUTOFF_YEAR) -> set[str]:
     out: set[str] = set()
+    if MODE != "toy":
+        from lab import msigdb
+        if toy_data.NEGATIVE_CONTROL in gene_set_ids:
+            raise NotImplementedError("the negative control has no real gene set yet: choose it and "
+                                      "record it in docs/cutoff-decision.md before a real run")
+        sets = _real(cutoff_year)[0].gene_sets[msigdb.RULE_COLLECTION]
+        unknown = [gs for gs in gene_set_ids if gs not in sets]
+        if unknown:
+            raise ValueError(f"gene sets not in the {msigdb.RULE_COLLECTION} snapshot: {unknown}")
+        for gs in gene_set_ids:
+            out.update(sets[gs])
+        return out
     for gs in gene_set_ids:
         out.update(toy_data.GENE_SETS.get(gs, []))
     return out
@@ -60,7 +99,7 @@ def pathway_enrichment(pool: list[dict], gene_set_ids: list[str], cutoff_year: i
     The gene universe is every gene targeted by the pool plus the gene set itself. A drug with
     no overlap scores 0. Remaining ties are broken by the run seed, not by drug id.
     """
-    genes = _gene_union(gene_set_ids)
+    genes = _gene_union(gene_set_ids, cutoff_year)
     universe = genes.union(*(p["targets"] for p in pool))
     scores = {}
     for p in pool:
@@ -151,7 +190,7 @@ def enrichment_z(ranked: list[dict], gene_set_ids: list[str], k: int = 10) -> fl
     """
     if not gene_set_ids:
         return 0.0
-    pool = masked_drug_pool(2015)
+    pool = masked_drug_pool(CUTOFF_YEAR)
     zs = [_set_z(ranked, pool, gs, k) for gs in gene_set_ids]
     return sum(zs) / math.sqrt(len(zs))
 
@@ -174,7 +213,16 @@ def assess(z: float, predicted_direction: str, confidence: float) -> tuple[str, 
 
 
 def target_drug_id() -> str | None:
-    return os.environ.get("LAB_TARGET_DRUG", toy_data.PLANTED if MODE == "toy" else None)
+    """Masked id of the target drug. Evaluation only: no agent-facing function may call this.
+
+    LAB_TARGET_DRUG overrides. Otherwise toy mode uses the planted drug and real mode the
+    pre-registered target in the eval-only target.json, so the id never has to be typed or printed.
+    """
+    if "LAB_TARGET_DRUG" in os.environ:
+        return os.environ["LAB_TARGET_DRUG"]
+    if MODE == "toy":
+        return toy_data.PLANTED
+    return _real(CUTOFF_YEAR)[1].target_masked_id
 
 
 def mid_rank(ranked: list[dict], drug_id: str) -> float | None:
@@ -200,4 +248,6 @@ def log_target_rank_eval_only(res_id: str, ranked: list[dict]) -> None:
 
 def unmask(drug_id: str) -> str:
     """Id to display name. Only used when publishing an approved ranking."""
-    return f"drug_{drug_id}" if MODE == "toy" else drug_id
+    if MODE == "toy":
+        return f"drug_{drug_id}"
+    return _real(CUTOFF_YEAR)[1].display_name(drug_id)
