@@ -56,7 +56,9 @@ tie-group mid-rank of sirolimus; see docs/cutoff-decision.md for the full pre-re
 - ChEMBL 19 check (scripts/check_chembl.sql, check_chembl_mtor.sql, run_sql.py): sirolimus is in
   the pool, approved, with potent recorded activity on mTOR via UniProt accession. Curated
   mechanism points at FKBP1A only; five drugs tie on it (sirolimus, everolimus, temsirolimus,
-  tacrolimus, pimecrolimus). Pool size with curated target: 1617 approved parent molecules.
+  tacrolimus, pimecrolimus). Pool size: 1146 approved parent molecules with at least one human
+  target, merged to parents (definition in data/README.md; an earlier count of 1617 included
+  non-human targets and was corrected).
 - MSigDB: NOT downloaded yet. Needed to decide whether Analysis 1 can reach sirolimus.
 - Loaders: NOT written. lab/scoring.py still runs on lab/toy_data.py.
 - Open PR: #3 (thierry/bridge-evidence-docs). Contains the decision record and the ChEMBL

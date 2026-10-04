@@ -67,6 +67,20 @@ def approved_parents(conn: sqlite3.Connection) -> list[str]:
     return sorted(ids[r[0]] for r in conn.execute(f"{FORMS} SELECT DISTINCT parent FROM forms"))
 
 
+POOL_DEFINITION = ("approved in ChEMBL 19 (max_phase 4), with at least one human target "
+                   "(curated drug_mechanism link, organism Homo sapiens, matched by UniProt "
+                   "accession), salts and other forms merged to the parent molecule")
+
+
+def pool_parents(conn: sqlite3.Connection) -> list[str]:
+    """The drug pool: POOL_DEFINITION. 1146 parents in ChEMBL 19, sorted.
+
+    The same pool is used for both link definitions, so the sensitivity analysis
+    (curated+activity) adds targets to these drugs but never adds drugs.
+    """
+    return sorted({drug for drug, _ in drug_target_links(conn, "curated")})
+
+
 def drug_target_links(conn: sqlite3.Connection, definition: str,
                       cutoff_year: int = CUTOFF_YEAR) -> list[tuple[str, str]]:
     """Sorted unique (drug_chembl_id, uniprot_accession) pairs for approved parents, human only."""

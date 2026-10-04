@@ -9,9 +9,11 @@ and manifest.json (row counts, SHA-256 of each file, source releases, cutoff yea
 
 Built on lab.chembl and lab.msigdb, so the pre-registered rules apply unchanged (see
 docs/cutoff-decision.md and lab/snapshot.py):
+- the pool is chembl.POOL_DEFINITION: approved in ChEMBL 19, at least one human target,
+  merged to parent molecules (1146 drugs), the same pool for both link definitions;
 - links come from both definitions, "curated" (drug_mechanism, primary) and "curated+activity"
-  (sensitivity), recorded per row; targets are human proteins matched by UniProt accession and
-  merged to the approved parent molecule;
+  (sensitivity), recorded per row, for pool drugs only; targets are human proteins matched by
+  UniProt accession and merged to the approved parent molecule;
 - gene symbols map to accessions only when unambiguous; ambiguous and unknown symbols are kept
   and labelled, never guessed.
 The tables hold ChEMBL ids, never drug names. lab/snapshot.py (JSON) remains the copy the lab
@@ -55,23 +57,23 @@ def _symbols_by_accession(symbols: dict[str, set[str]]) -> dict[str, str]:
 
 
 def drug_targets_frame(conn: sqlite3.Connection, symbols: dict[str, set[str]],
-                       cutoff_year: int) -> pd.DataFrame:
+                       cutoff_year: int, pool: list[str]) -> pd.DataFrame:
     by_acc = _symbols_by_accession(symbols)
+    in_pool = set(pool)
     rows = [{"definition": d, "drug_chembl_id": drug, "uniprot_accession": acc,
              "gene_symbol": by_acc.get(acc)}
             for d in chembl.DEFINITIONS
-            for drug, acc in chembl.drug_target_links(conn, d, cutoff_year)]
+            for drug, acc in chembl.drug_target_links(conn, d, cutoff_year) if drug in in_pool]
     frame = pd.DataFrame(rows, columns=["definition", "drug_chembl_id", "uniprot_accession",
                                         "gene_symbol"])
     return frame.sort_values(list(frame.columns)).reset_index(drop=True)
 
 
-def drug_pool_frame(conn: sqlite3.Connection, targets: pd.DataFrame) -> pd.DataFrame:
-    """Approved parents with at least one target under either definition, with per-definition counts."""
-    approved = set(chembl.approved_parents(conn))
+def drug_pool_frame(pool: list[str], targets: pd.DataFrame) -> pd.DataFrame:
+    """The pool (chembl.POOL_DEFINITION) with each drug's target count per link definition."""
     counts = (targets.groupby(["drug_chembl_id", "definition"]).size()
-              .unstack(fill_value=0).reindex(columns=list(chembl.DEFINITIONS), fill_value=0))
-    counts = counts[counts.index.isin(approved)]
+              .unstack(fill_value=0).reindex(index=pool, columns=list(chembl.DEFINITIONS),
+                                             fill_value=0))
     frame = pd.DataFrame({
         "drug_chembl_id": counts.index,
         "n_targets_curated": counts["curated"].astype("int64").to_numpy(),
@@ -114,8 +116,9 @@ def build(conn: sqlite3.Connection, msigdb_root: Path, out: Path = DEFAULT_OUT,
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     symbols = chembl.symbol_map(conn)
-    targets = drug_targets_frame(conn, symbols, cutoff_year)
-    pool = drug_pool_frame(conn, targets)
+    pool_ids = chembl.pool_parents(conn)
+    targets = drug_targets_frame(conn, symbols, cutoff_year, pool_ids)
+    pool = drug_pool_frame(pool_ids, targets)
     sets, sources = gene_sets_frame(symbols, msigdb_root, collections)
     tables = {"drug_targets": _write(targets, out / "drug_targets.parquet"),
               "drug_pool": _write(pool, out / "drug_pool.parquet"),
@@ -128,8 +131,7 @@ def build(conn: sqlite3.Connection, msigdb_root: Path, out: Path = DEFAULT_OUT,
                     "msigdb": {"release": "4.0 (May 2013)", "collections": list(collections),
                                "gmt_sha256": sources}},
         "rules": snapshot.RULES,
-        "pool_size": {"curated": int((pool["n_targets_curated"] > 0).sum()),
-                      "curated+activity": int((pool["n_targets_curated_activity"] > 0).sum())},
+        "pool": {"size": len(pool), "definition": chembl.POOL_DEFINITION},
         "tables": tables,
     }
     (out / "manifest.json").write_text(json.dumps(manifest, indent=1, sort_keys=True) + "\n")
@@ -141,9 +143,8 @@ def report(conn: sqlite3.Connection, out: Path, drugs=DEFAULT_DRUGS, genes=DEFAU
     targets = pd.read_parquet(out / "drug_targets.parquet")
     sets = pd.read_parquet(out / "gene_sets.parquet")
     manifest = json.loads((out / "manifest.json").read_text())
-    lines = [f"Pool size (approved parents with >= 1 human target): "
-             f"{manifest['pool_size']['curated']} curated, "
-             f"{manifest['pool_size']['curated+activity']} curated+activity", ""]
+    lines = [f"Pool size: {manifest['pool']['size']} drugs ({manifest['pool']['definition']})",
+             ""]
     for name in drugs:  # names are looked up here only; the tables hold ChEMBL ids
         row = conn.execute("SELECT chembl_id FROM molecule_dictionary WHERE lower(pref_name) = ?",
                            (name.lower(),)).fetchone()

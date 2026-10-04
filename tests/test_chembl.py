@@ -56,6 +56,17 @@ def test_pool_collapses_salts_and_drops_unapproved():
     assert chembl.approved_parents(_db()) == ["CHEMBL1", "CHEMBL4"]
 
 
+def test_pool_is_approved_parents_with_a_curated_human_target():
+    c = _db()
+    c.executemany("INSERT INTO drug_mechanism VALUES (?,?)",
+                  [(2, 11),    # the salt of CHEMBL1 -> human FKBP1A: CHEMBL1 is in the pool
+                   (4, 12)])   # CHEMBL4 -> a rat protein only: not in the pool
+    _act(c, 4, 10, 2010)       # an activity link does not put a drug in the pool
+    _act(c, 3, 10, 2010)       # nor does anything put an unapproved molecule in it
+    assert chembl.pool_parents(c) == ["CHEMBL1"]
+    assert "human target" in chembl.POOL_DEFINITION and "parent" in chembl.POOL_DEFINITION
+
+
 def test_curated_matches_by_accession_through_the_salt_to_its_parent():
     c = _db()
     c.execute("INSERT INTO drug_mechanism VALUES (2, 11)")  # on the salt form
@@ -126,6 +137,7 @@ def test_real_snapshot_sirolimus_links():
     sirolimus = c.execute("SELECT chembl_id FROM molecule_dictionary "
                           "WHERE lower(pref_name) = 'sirolimus'").fetchone()[0]
     assert len(chembl.approved_parents(c)) == 1885
+    assert len(chembl.pool_parents(c)) == 1146  # the drug pool (data/README.md)
     curated = {a for d, a in chembl.drug_target_links(c, "curated") if d == sirolimus}
     both = {a for d, a in chembl.drug_target_links(c, "curated+activity", 2015) if d == sirolimus}
     assert curated == {"P62942"}                # FKBP1A only: the pre-registered Analysis 1 gap

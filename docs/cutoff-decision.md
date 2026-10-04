@@ -133,8 +133,14 @@ what any individual did.
 ## ChEMBL 19 pin (scripts/check_chembl.sql and check_chembl_mtor.sql)
 
 - Version table: ChEMBL_19, created 2014-07-03.
-- Approved molecules (max_phase 4): 2759. Approved parent molecules with a curated mechanism
-  target: 1617 (pool size N under the curated definition).
+- Approved molecules (max_phase 4): 2759. Drug pool (pool size N): 1146 approved parent molecules
+  with at least one human target (curated drug_mechanism link, Homo sapiens, matched by UniProt
+  accession), salts and other forms merged to the parent. The same pool is used for both link
+  definitions (lab.chembl.POOL_DEFINITION; data/README.md).
+- Amendment, 2026-10-04, before any lab run on real data: this line first gave N = 1617, which
+  counted every approved parent with any drug_mechanism row, including non-human targets
+  (bacteria, viruses, fungi, parasites) and mechanism rows with no target. The loader always
+  used human targets only. N is now 1146 everywhere; decided by Sal Fakoya.
 - Present and approved: sirolimus, everolimus, temsirolimus, siltuximab, tocilizumab, anakinra,
   rituximab, thalidomide.
 - Curated mechanism targets: siltuximab -> IL6 (P05231), tocilizumab -> IL6R (P08887),

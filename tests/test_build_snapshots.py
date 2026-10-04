@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
+from test_chembl import _act
 from test_snapshot import _conn
 
 from lab import chembl
@@ -27,6 +28,7 @@ def _fixture_conn() -> sqlite3.Connection:
     c.execute("UPDATE molecule_dictionary SET pref_name = 'sirolimus' WHERE molregno = 1")
     c.executemany("INSERT INTO component_synonyms VALUES (?, ?, 'GENE_SYMBOL')",
                   [(103, "SHARED"), (104, "SHARED")])  # one alias, two proteins: ambiguous
+    _act(c, 4, 10, 2012)  # CHEMBL4 (approved) reaches mTOR by activity only: not in the pool
     return c
 
 
@@ -71,15 +73,16 @@ def test_drug_targets_are_parent_human_accessions_with_symbols_per_definition(bu
                     ("curated+activity", "CHEMBL1", "P62942", "FKBP1A"),
                     ("curated+activity", "CHEMBL1", "P42345", "MTOR")}  # mTOR only by activity
     assert "CHEMBL2" not in set(t["drug_chembl_id"])  # the salt is merged into its parent
+    assert "CHEMBL4" not in set(t["drug_chembl_id"])  # activity-only drug: outside the pool
 
 
-def test_drug_pool_is_approved_parents_with_a_target(built):
+def test_drug_pool_is_approved_parents_with_a_human_target(built):
     _, out, manifest = built
     pool = pd.read_parquet(out / "drug_pool.parquet")
     assert pool.to_dict("records") == [
         {"drug_chembl_id": "CHEMBL1", "n_targets_curated": 1, "n_targets_curated_activity": 2}]
-    # CHEMBL4 is approved but has no target; CHEMBL3 is not approved
-    assert manifest["pool_size"] == {"curated": 1, "curated+activity": 1}
+    # CHEMBL4 is approved but has only an activity link; CHEMBL3 is not approved
+    assert manifest["pool"] == {"size": 1, "definition": chembl.POOL_DEFINITION}
 
 
 def test_gene_sets_keep_every_symbol_and_label_the_mapping(built):
@@ -108,7 +111,7 @@ def test_tables_hold_no_drug_names(built):
 def test_report_prints_pool_drug_targets_and_gene_sets(built):
     conn, out, _ = built
     text = bs.report(conn, out, drugs=["sirolimus", "tocilizumab"], genes=["MTOR", "IL6"])
-    assert "Pool size (approved parents with >= 1 human target): 1 curated, 1 curated+activity" in text
+    assert f"Pool size: 1 drugs ({chembl.POOL_DEFINITION})" in text
     assert "sirolimus (CHEMBL1):" in text
     assert "curated           FKBP1A (P62942)" in text
     assert "MTOR (P42345)" in text and "tocilizumab: not in ChEMBL" in text
@@ -146,9 +149,8 @@ def test_snapshots_folder_is_gitignored():
 def test_real_snapshot(tmp_path):
     conn = chembl.connect()
     manifest = bs.build(conn, bs.msigdb.MSIGDB_DIR, tmp_path / "v1")
-    # Human targets with an accession only (lab.chembl's rule). docs/cutoff-decision.md's N = 1617
-    # counts every approved parent with any drug_mechanism row, including non-human targets.
-    assert manifest["pool_size"] == {"curated": 1146, "curated+activity": 1208}
+    assert manifest["pool"]["size"] == 1146  # data/README.md, docs/cutoff-decision.md
+    assert len(pd.read_parquet(tmp_path / "v1" / "drug_pool.parquet")) == 1146
     t = pd.read_parquet(tmp_path / "v1" / "drug_targets.parquet")
     sirolimus = conn.execute("SELECT chembl_id FROM molecule_dictionary "
                              "WHERE lower(pref_name) = 'sirolimus'").fetchone()[0]

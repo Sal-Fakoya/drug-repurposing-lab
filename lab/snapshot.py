@@ -2,7 +2,7 @@
 
 Build:  python -m lab.snapshot [cutoff_year]      (needs data/raw/ from setup_data.py + MSigDB v4.0)
 Layout: data/snapshots/<cutoff_year>/
-          drug_pool.json            approved parent molecules, ChEMBL ids only (no names)
+          drug_pool.json            the drug pool (chembl.POOL_DEFINITION), ChEMBL ids only (no names)
           drug_target_links.json    {"curated": [[drug, uniprot]...], "curated+activity": [...]}
           gene_sets_<collection>.json         {set_name: [uniprot...]}
           gene_set_report_<collection>.json   per-set mapping loss (mapped / ambiguous / unmapped)
@@ -28,6 +28,7 @@ RULES = {
     "curated+activity": ("curated plus human IC50/Ki/Kd <= 1000 nM, relation in '=', '<', '<=', "
                          "in documents dated before the cutoff (Analysis 2, sensitivity)"),
     "targets": "matched by UniProt accession, human only, salts collapsed to the parent",
+    "pool": chembl.POOL_DEFINITION + "; the same pool for both link definitions",
     "gene_sets": ("MSigDB v4.0 symbols mapped via ChEMBL 19 synonyms; ambiguous symbols excluded, "
                   "unmapped symbols dropped, both counted in gene_set_report_*.json"),
 }
@@ -54,8 +55,10 @@ def build(cutoff_year: int = CUTOFF_YEAR, root: Path = SNAPSHOT_ROOT, conn=None,
     out = Path(root) / str(cutoff_year)
     out.mkdir(parents=True, exist_ok=True)
 
-    pool = chembl.approved_parents(conn)
-    links = {d: sorted(chembl.drug_target_links(conn, d, cutoff_year)) for d in chembl.DEFINITIONS}
+    pool = chembl.pool_parents(conn)
+    in_pool = set(pool)
+    links = {d: sorted(p for p in chembl.drug_target_links(conn, d, cutoff_year) if p[0] in in_pool)
+             for d in chembl.DEFINITIONS}
     symbols = chembl.symbol_map(conn)
     blobs = {"drug_pool.json": pool, "drug_target_links.json": {d: [list(p) for p in v]
                                                                 for d, v in links.items()}}
