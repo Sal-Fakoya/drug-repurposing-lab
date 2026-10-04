@@ -257,7 +257,7 @@ what any individual did.
 
 ## Amendment, 2026-10-04: feasibility check, analysis roles, gene-set rule
 
-Recorded before any lab run on real data and before any drug masking exists. It adds to the
+Recorded before any lab run on real data and before any run uses the drug mask. It adds to the
 "MSigDB v4.0 pin" section above, which already records the FKBP1A observation and the order of
 events.
 
@@ -277,15 +277,26 @@ replay:
 - MSigDB v4.0 c2.cp sets containing the genes MTOR / FKBP1A / IL6: 58 / 11 / 37 (103 distinct).
 - Method A scored on each of those sets alone, over the whole pool (not a lab run):
   - curated: sirolimus scores only through the 11 FKBP1A sets, at best mid-rank 3.0 in a five-way
-    tie with the four drugs above, and about mid-rank 574 (tied with nearly the whole pool) in
-    every MTOR-only or IL6 set;
+    tie with the four drugs above, and between mid-rank 573.5 and 631 in each of the 92 MTOR-only
+    or IL6 sets (it has no overlap with them, so it sits in the large tie group of drugs that
+    score zero);
   - curated+activity: rank 1, untied, in BIOCARTA_MTOR_PATHWAY and several mTOR and PI3K sets.
 
 ### Analysis roles: unchanged
 
 The curated definition stays the primary analysis (Analysis 1) and curated plus activity
 <= 1000 nM stays the sensitivity analysis (Analysis 2). Both are run and reported whatever they
-show. Neither the roles nor the definitions were changed after seeing the facts above.
+show. Neither the roles nor the two link definitions were changed after seeing the facts above.
+
+Two other choices were made on the same day, after the FKBP1A observation had been recorded in
+"MSigDB v4.0 pin". They are stated here so they can be judged: the drug pool was restricted to
+drugs with at least one human target (1146 drugs, see "ChEMBL 19 pin"), and hypotheses may use
+only the `c2.cp` collection, not `c2.all`. The recorded reasons are that drugs without a human
+target can never score against human gene sets and would inflate the random baseline, and that
+`c2.all` holds drug-treatment signatures (for example rapamycin response) that would leak drug
+identity. Neither choice adds a route to sirolimus: the first shrinks the pool, and the second
+removes routes (for example PARENT_MTOR_SIGNALING_UP, a `c2.all` set containing both FKBP1A and
+MTOR).
 
 ### The gene-set rule as implemented
 
@@ -320,5 +331,6 @@ names. The other three terms already matched and are unchanged.
 
 ### Masking
 
-No drug mask has been created yet. When it is, the target's masked id stays in
-`data/eval_only/` and is not printed or recorded anywhere else.
+A drug mask exists (salt fingerprint 3ffadf45, created 2026-10-04 on one machine and shared
+privately); no lab run has used it yet. The target's masked id stays in the eval folder
+(`LAB_EVAL_DIR`, by default `~/.drug_lab_eval`) and is not printed or recorded anywhere else.
