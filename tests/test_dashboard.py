@@ -177,3 +177,15 @@ def test_page_is_always_light_whatever_the_system_theme(tmp_path):
     page = _text(dash.build(tmp_path / "i.html", "toy"))
     assert "prefers-color-scheme" not in page and "color-scheme:light" in page
     assert "--paper:#FFFFFF" in page
+
+
+def test_attribution_footer_and_no_gene_lists_on_the_page(tmp_path):
+    """ChEMBL is CC BY-SA (attribute it); MSigDB is internal-use only (no gene sets in the output)."""
+    root, ev = _real(tmp_path)
+    snap = snapshot.load(2015, root)
+    page = _text(dash.build(tmp_path / "i.html", "real", 2015, root, eval_dir=ev))
+    assert "ChEMBL release 19" in page and "CC BY-SA 3.0" in page
+    genes = {g for sets in snap.gene_sets.values() for s in sets.values() for g in s}
+    genes |= {g for _, g in snap.links["curated+activity"]}
+    assert genes and not [g for g in genes if g in page]
+    assert not [n for sets in snap.gene_sets.values() for n in sets if n in page]

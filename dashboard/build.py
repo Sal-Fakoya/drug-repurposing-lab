@@ -29,6 +29,10 @@ SYNTHETIC_TAG = '<span class="tag">synthetic</span>'
 OUT = ROOT / "dashboard" / "out" / "index.html"
 LIMITATIONS = ROOT / "LIMITATIONS.md"
 
+ATTRIBUTION = ("Drug-target data: ChEMBL release 19 (EMBL-EBI, July 2014), licensed CC BY-SA 3.0; "
+               "Bento et al., Nucleic Acids Res. 2014. Pathway gene sets are used for internal research only "
+               "(MSigDB v4.0, Broad Institute) and are not reproduced on this page.")
+
 CSS = """
 :root{color-scheme:light;--paper:#FFFFFF;--panel:#FAF9F5;--ink:#14181D;--muted:#5B6068;--soft:rgba(20,24,29,.16);
 --grid:rgba(20,24,29,.05);--shadow:#14181D;--mark:#FFF3A8;--signal:#B3261E;
@@ -70,6 +74,7 @@ figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
 .pills{display:flex;flex-wrap:wrap;gap:.5rem;padding:1.2rem 0 .4rem}
 .pills a{border:1px solid var(--ink);background:var(--panel);color:var(--ink);padding:.3rem .85rem;border-radius:2px;text-decoration:none;font-size:.95rem}
 .pills a:hover{background:var(--mark);color:#14181D}
+.attribution{font-size:.85rem;color:var(--muted,#555);padding:1rem 0 2rem;border-top:1px solid #ddd}
 .sec{padding:1.4rem 0 1rem}
 .sec h2{font:700 1.5rem/1.2 var(--serif);margin:0}
 .sec h3{font:700 1.05rem var(--serif);margin:1.4rem 0 .3rem}
@@ -243,7 +248,8 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{none}</div></div></section>
 <section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
 <section class="sec" id="limits"><h2>Limitations</h2>{limitations_html}</section>
-</main></body></html>
+</main>
+<footer class="attribution"><p>{e(ATTRIBUTION)}</p></footer></body></html>
 """
 
 
