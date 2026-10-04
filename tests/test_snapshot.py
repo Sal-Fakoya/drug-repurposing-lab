@@ -44,14 +44,15 @@ def test_same_inputs_give_identical_bytes(tmp_path):
 def test_load_roundtrip_in_the_shape_scoring_uses(tmp_path):
     _build(tmp_path, "s")
     snap = snapshot.load(2015, tmp_path / "s")
-    assert snap.drugs == ["CHEMBL1", "CHEMBL4"]
+    assert snap.drugs == ["CHEMBL1"]  # CHEMBL4 has no human target: outside the pool
     assert snap.links["curated"] == [("CHEMBL1", "P62942")]
     assert snap.links["curated+activity"] == [("CHEMBL1", "P42345"), ("CHEMBL1", "P62942")]
     assert snap.gene_sets["c2.cp"]["SET_A"] == {"P42345", "P62942"}
     assert "SET_B" not in snap.gene_sets["c2.cp"]                 # IL6 unknown to this ChEMBL
-    assert snap.pool() == [{"drug_id": "CHEMBL1", "targets": ["P62942"]},
-                           {"drug_id": "CHEMBL4", "targets": []}]   # untargeted drugs stay in the pool
-    assert snap.manifest["counts"]["drugs"] == 2
+    assert snap.pool() == [{"drug_id": "CHEMBL1", "targets": ["P62942"]}]
+    assert snap.pool("curated+activity") == [{"drug_id": "CHEMBL1", "targets": ["P42345", "P62942"]}]
+    assert snap.manifest["counts"]["drugs"] == 1
+    assert snap.manifest["rules"]["pool"].startswith(chembl.POOL_DEFINITION)
 
 
 def test_any_edit_is_refused(tmp_path):
@@ -85,6 +86,7 @@ def test_real_snapshot_numbers_and_determinism(tmp_path):
     b = snapshot.build(2015, tmp_path / "b")
     assert snapshot.load(2015, tmp_path / "a").sha256 == snapshot.load(2015, tmp_path / "b").sha256
     snap = snapshot.load(2015, tmp_path / "a")
-    assert (len(snap.drugs), len(snap.links["curated"]), len(snap.links["curated+activity"])) == (1885, 3779, 5661)
+    # pool = data/README.md's definition; curated+activity links are kept for pool drugs only
+    assert (len(snap.drugs), len(snap.links["curated"]), len(snap.links["curated+activity"])) == (1146, 3779, 5516)
     assert {"P62942", "P42345"} <= snap.gene_sets["c2.cp"]["BIOCARTA_MTOR_PATHWAY"]
     assert sum(len(p.read_bytes()) for p in a.iterdir()) == sum(len(p.read_bytes()) for p in b.iterdir())

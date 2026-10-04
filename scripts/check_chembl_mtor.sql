@@ -40,9 +40,20 @@ JOIN target_dictionary td ON td.tid = dm.tid
 WHERE td.chembl_id = 'CHEMBL1902' AND md.max_phase = 4
 ORDER BY md.pref_name;
 
--- E. Pool size after merging salts and forms to the parent molecule.
-SELECT COUNT(DISTINCT mh.parent_molregno) AS approved_parents_with_target
-FROM molecule_dictionary md
-JOIN molecule_hierarchy mh ON mh.molregno = md.molregno
-JOIN drug_mechanism dm ON dm.molregno = md.molregno
-WHERE md.max_phase = 4;
+-- E. Pool size.
+-- The drug pool (lab.chembl.POOL_DEFINITION): approved parents (max_phase 4, salts and other
+-- forms merged to the parent) with at least one curated human target matched by UniProt accession.
+-- 1146 in ChEMBL 19. (Counting any drug_mechanism row instead gives 1617: that includes
+-- non-human targets such as bacteria and viruses, and mechanism rows with no target.)
+WITH forms(molregno, parent) AS (
+    SELECT h.molregno, h.parent_molregno FROM molecule_hierarchy h
+      JOIN molecule_dictionary p ON p.molregno = h.parent_molregno WHERE p.max_phase = 4
+    UNION SELECT molregno, molregno FROM molecule_dictionary WHERE max_phase = 4
+      AND molregno NOT IN (SELECT molregno FROM molecule_hierarchy))
+SELECT COUNT(DISTINCT f.parent) AS pool_size
+FROM forms f
+JOIN drug_mechanism dm ON dm.molregno = f.molregno
+JOIN target_dictionary td ON td.tid = dm.tid
+JOIN target_components tc ON tc.tid = td.tid
+JOIN component_sequences cs ON cs.component_id = tc.component_id
+WHERE td.organism = 'Homo sapiens' AND cs.accession IS NOT NULL;
