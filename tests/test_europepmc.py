@@ -147,6 +147,17 @@ NEGATIONS = [  # every negation form the status rule accepts
     ("KSHV-negative", ["KSHV"]),
     ("Kaposi sarcoma-associated herpesvirus (KSHV)-negative", ["KSHV"]),
     ("human herpesvirus 8 (HHV-8)-negative", ["HHV-8"]),
+    ("no evidence of HHV-8", ["HHV-8"]),
+    ("no evidence of HHV-8 or HIV", ["HHV-8", "HIV"]),
+    ("HHV-8 PCR negative", ["HHV-8"]),
+    ("HHV-8 PCR was negative", ["HHV-8"]),
+    ("HHV-8 was not detected", ["HHV-8"]),
+    ("HIV and HHV-8 were not detected", ["HHV-8", "HIV"]),
+    ("LANA-1 negative", ["HHV-8"]),
+    ("LANA-1-negative", ["HHV-8"]),
+    ("negative for LANA-1", ["HHV-8"]),
+    ("absence of HHV-8", ["HHV-8"]),
+    ("absence of KSHV and HIV", ["KSHV", "HIV"]),
 ]
 
 
@@ -173,9 +184,12 @@ def test_a_negation_plus_a_positive_finding_counts_as_positive(phrase):
     ("Castleman disease and Kaposi's sarcoma", "", ["Kaposi"]),
     ("Castleman disease", "Patients were HIV-positive.", ["HIV"]),
     ("Castleman disease in HIV-infected patients", "", ["HIV"]),
+    ("Castleman disease", "LANA-1-positive plasmablasts were seen.", ["HHV-8"]),
+    ("Castleman disease", "HHV-8 PCR was positive.", ["HHV-8"]),
+    # a negation of something else does not negate a later HHV-8 finding
+    ("Castleman disease", "No evidence of lymphoma; HHV-8-associated MCD.", ["HHV-8"]),
     # not one of the negation forms, so it stays positive (the exclusion run drops it)
-    ("Castleman disease", "There was no evidence of HHV-8.", ["HHV-8"]),
-    ("Castleman disease", "HHV-8 PCR was negative.", ["HHV-8"]),
+    ("Castleman disease", "HHV-8 serology was unremarkable.", ["HHV-8"]),
 ])
 def test_present_or_causal_mentions_are_positive(title, abstract, terms):
     assert hhv8.classify(title, abstract) == ("positive", terms)
