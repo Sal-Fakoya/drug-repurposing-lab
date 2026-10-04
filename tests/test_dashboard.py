@@ -94,3 +94,54 @@ def test_banner_and_synthetic_bar_share_one_sticky_container(tmp_path):
     wrapper = re.search(r'<header class="bars">(.*?)</header>', page, re.S).group(1)
     assert dash.BANNER in wrapper and dash.SYNTHETIC in wrapper
     assert ".bars{position:sticky" in page and ".bar{position:sticky" not in page
+
+
+def _row(i, synthetic=False, kind="verdict", agent="analysis"):
+    row = {"id": i, "kind": kind, "ts": "2026-10-04T00:00:00Z", "agent": agent, "payload": {"secret": "PAYLOAD-X"}}
+    if synthetic is not None:
+        row["synthetic"] = synthetic
+    return row
+
+
+def test_real_rows_with_no_synthetic_flag_show_no_bar(tmp_path):
+    root, ev = _real(tmp_path)
+    rows = [_row("hyp_001", False, "hypothesis"), _row("res_001", False, "result")]
+    page = _text(dash.build(tmp_path / "i.html", "real", 2015, root, eval_dir=ev, rows=rows))
+    assert dash.SYNTHETIC not in page and "2 loaded, 0 synthetic" in page
+
+
+def test_one_synthetic_row_raises_the_page_wide_bar_and_is_tagged(tmp_path):
+    root, ev = _real(tmp_path)
+    rows = [_row("hyp_001", False, "hypothesis"), _row("res_001", True, "result")]
+    page = _text(dash.build(tmp_path / "i.html", "real", 2015, root, eval_dir=ev, rows=rows))
+    assert dash.SYNTHETIC in page and "2 loaded, 1 synthetic" in page
+    assert page.count(dash.SYNTHETIC_TAG) == 1                     # only the synthetic row is tagged
+    tagged = [r for r in page.split("<tr>") if dash.SYNTHETIC_TAG in r]
+    assert len(tagged) == 1 and "res_001" in tagged[0] and "hyp_001" not in tagged[0]
+
+
+def test_a_row_that_does_not_say_is_treated_as_synthetic(tmp_path):
+    root, ev = _real(tmp_path)
+    page = _text(dash.build(tmp_path / "i.html", "real", 2015, root, eval_dir=ev,
+                            rows=[_row("res_009", None)]))
+    assert dash.SYNTHETIC in page and "1 loaded, 1 synthetic" in page
+
+
+def test_toy_mode_without_rows_still_shows_the_bar_and_no_row_table(tmp_path):
+    page = _text(dash.build(tmp_path / "i.html", "toy"))
+    assert dash.SYNTHETIC in page and "Ledger rows loaded" not in page
+
+
+def test_only_envelope_fields_are_rendered_and_they_are_escaped(tmp_path):
+    rows = [_row("<img src=x onerror=alert(1)>", True, "<b>kind</b>", agent="<script>")]
+    page = _text(dash.build(tmp_path / "i.html", "toy", rows=rows))
+    assert "PAYLOAD-X" not in page                                  # payload is never rendered
+    assert "<img" not in page and "<b>kind" not in page and "<script" not in page
+    assert "&lt;img" in page
+
+
+def test_malformed_rows_fail_loudly(tmp_path):
+    with pytest.raises(ValueError, match="id and a kind"):
+        dash.build(tmp_path / "i.html", "toy", rows=[{"kind": "result"}])
+    with pytest.raises(ValueError, match="id and a kind"):
+        dash.build(tmp_path / "i.html", "toy", rows=["not a row"])
