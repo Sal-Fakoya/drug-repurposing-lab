@@ -56,11 +56,14 @@ def init(drugs: list[str], names: dict[str, str], target_chembl_id: str, snapsho
     """Write the eval-only files and return the salt fingerprint. Refuses to replace an existing mask.
 
     Replacing the salt silently renames every drug, which would orphan every ledger row, so it needs
-    force=True.
+    force=True, and even then the old mask.json is kept as mask.<fingerprint>.bak.json first, so a
+    shared salt can never be lost by a rotation.
     """
     eval_dir = Path(eval_dir)
-    if (eval_dir / "mask.json").exists() and not force:
-        raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True (CLI: --force) to rotate the salt")
+    if (eval_dir / "mask.json").exists():
+        if not force:
+            raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True (CLI: --force) to rotate the salt")
+        backup_mask(eval_dir)
     if target_chembl_id not in drugs:
         raise ValueError(f"target {target_chembl_id} is not in the drug pool")
     salt = salt or secrets.token_hex(32)
@@ -73,6 +76,17 @@ def init(drugs: list[str], names: dict[str, str], target_chembl_id: str, snapsho
     _write_private(eval_dir / "names.json", {d: names.get(d) or d for d in drugs})
     _write_private(eval_dir / "target.json", {"target_chembl_id": target_chembl_id})
     return fingerprint(salt)
+
+
+def backup_mask(eval_dir: Path) -> Path | None:
+    """Copy an existing mask.json to mask.<fingerprint>.bak.json (owner-only). None if there is none."""
+    src = Path(eval_dir) / "mask.json"
+    if not src.exists():
+        return None
+    old = json.loads(src.read_text())
+    dest = Path(eval_dir) / f"mask.{fingerprint(old['salt'])}.bak.json"
+    _write_private(dest, old)
+    return dest
 
 
 def fingerprint(salt: str) -> str:
@@ -190,17 +204,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--force", action="store_true",
                     help="init: rotate the salt, renaming every drug. restore: overwrite names.json/target.json")
     args = ap.parse_args(argv)
-    if args.command == "init" and (others := other_masks(EVAL_DIR)):
-        raise FileExistsError(
-            f"another mask.json already exists at {[str(p) for p in others]}. A second one means two "
-            f"salts and different masked ids. Use that folder (set LAB_EVAL_DIR to it), or, if it is "
-            f"a mistake, delete it first. To use a mask someone sent you, run `restore`, not `init`.")
-    run = restore_from_snapshot if args.command == "restore" else init_from_snapshot
-    if args.command == "init" and args.force:
-        print("rotating the salt: every masked id changes")
-    fp = run(snapshot_mod.load(), chembl.connect(), eval_dir=EVAL_DIR, force=args.force)
+    try:
+        if args.command == "init" and (others := other_masks(EVAL_DIR)):
+            raise FileExistsError(
+                f"another mask.json already exists at {[str(p) for p in others]}. A second one means two "
+                f"salts and different masked ids. Use that folder (set LAB_EVAL_DIR to it), or, if it is "
+                f"a mistake, delete it first. To use a mask someone sent you, run `restore`, not `init`.")
+        run = restore_from_snapshot if args.command == "restore" else init_from_snapshot
+        if args.command == "init" and args.force and (EVAL_DIR / "mask.json").exists():
+            print("rotating the salt: every masked id changes. The old mask.json is kept as "
+                  f"mask.<fingerprint>.bak.json in {EVAL_DIR}; delete it only if no ledger row or shared copy needs it.")
+        fp = run(snapshot_mod.load(), chembl.connect(), eval_dir=EVAL_DIR, force=args.force)
+    except (FileExistsError, FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"error: {exc}") from None
     print(f"{args.command} done in {EVAL_DIR}  salt fingerprint {fp}  (the salt itself is never printed)")
-
 
 if __name__ == "__main__":
     main()
