@@ -257,21 +257,24 @@ what any individual did.
 
 ## Amendment, 2026-10-04: feasibility check, analysis roles, gene-set rule
 
-Recorded before any lab run on real data and before any drug masking exists.
+Recorded before any lab run on real data and before any drug masking exists. It adds to the
+"MSigDB v4.0 pin" section above, which already records the FKBP1A observation and the order of
+events.
 
 ### Disclosure: what we looked at before the run
 
 On 2026-10-04 Sal Fakoya, working with Claude Code, inspected the real data layer: the ChEMBL 19
-and MSigDB v4.0 snapshot for cutoff 2015 (`lab.snapshot`, sha256 `57be32ea9e0064f44bc1ae5ed582380880937d046b9169ee237ea09305d3804a`;
-pool 1146 drugs, 3779 curated and 5516 curated+activity links). We therefore know these facts
-about the target before the replay:
+and MSigDB v4.0 snapshot for cutoff 2015 (`lab.snapshot`, sha256
+`57be32ea9e0064f44bc1ae5ed582380880937d046b9169ee237ea09305d3804a`; pool 1146 drugs, 3779 curated
+and 5516 curated+activity links). We therefore know these facts about the target before the
+replay:
 
 - Sirolimus (CHEMBL413) is in the 1146-drug pool. Its curated target is FKBP1A (P62942) only.
   Under curated+activity it also links to MTOR (P42345), EIF4E (P06730) and FKBP5 (Q13451).
 - Tocilizumab: IL6R (P08887). Siltuximab: IL6 (P05231). Both are the same under both definitions.
 - Five pool drugs have FKBP1A as their only curated target: sirolimus, everolimus, temsirolimus,
   tacrolimus, pimecrolimus.
-- MSigDB v4.0 c2.cp sets containing MTOR / FKBP1A / IL6: 58 / 11 / 37 (103 distinct sets).
+- MSigDB v4.0 c2.cp sets containing the genes MTOR / FKBP1A / IL6: 58 / 11 / 37 (103 distinct).
 - Method A scored on each of those sets alone, over the whole pool (not a lab run):
   - curated: sirolimus scores only through the 11 FKBP1A sets, at best mid-rank 3.0 in a five-way
     tie with the four drugs above, and about mid-rank 574 (tied with nearly the whole pool) in
@@ -284,37 +287,32 @@ The curated definition stays the primary analysis (Analysis 1) and curated plus 
 <= 1000 nM stays the sensitivity analysis (Analysis 2). Both are run and reported whatever they
 show. Neither the roles nor the definitions were changed after seeing the facts above.
 
-### Pre-specified rule for mapping hypothesis terms to gene sets
+### The gene-set rule as implemented
 
-`find_gene_set(term, cutoff_year)` maps a term to MSigDB v4.0 c2.cp gene sets with this rule
-(`lab.msigdb`, `RULE_VERSION = "c2cp-name-tokens-v1"`), applied identically to every term, whether
-it comes from the configuration or from an agent:
+`find_gene_set(term, cutoff_year)` implements the rule recorded in "MSigDB v4.0 pin" (every c2.cp
+set whose name contains the term's keyword) as `lab.msigdb.match_term`,
+`RULE_VERSION = "c2cp-name-contains-v1"`, applied identically to every term, whether it comes
+from the configuration or from an agent. The keyword is made mechanically from the term:
 
-1. Normalise the term and each set name the same way: upper-case, split on every character that
-   is not a letter or digit, and join a letter-only token with a following number-only token
-   ("IL-6" and `REACTOME_IL_6_...` both give IL6). From set names, drop the source prefix (the
-   text before the first underscore, such as BIOCARTA or KEGG).
-2. Drop these words from both: SIGNALING, SIGNALLING, SIGNAL, PATHWAY, PATHWAYS, THE, OF, AND, BY,
+1. Upper-case the term and remove any separator between a letter and a following digit
+   ("IL-6" and "IL 6" give IL6).
+2. Split on every other character that is not a letter or digit.
+3. Drop these words: SIGNALING, SIGNALLING, SIGNAL, PATHWAY, PATHWAYS, THE, OF, AND, BY,
    VIA, IN.
-3. A set matches when every remaining term token is one of the set name's tokens. Only sets with
-   at least one gene mapped to a UniProt accession (the snapshot's sets) are candidates.
-4. The result is the sorted list of matching sets. A term with no tokens matches nothing. No
-   synonyms, no fuzzy matching, no manual additions or removals. If nothing matches, the
-   hypothesis is not testable by methods A and B and must say `testable: false`.
+4. Join what is left with underscores ("JAK-STAT signaling" gives JAK_STAT).
 
-The rule was written after the feasibility check above, so its effect on the target is
-disclosed here: the configured terms map as follows.
+A set matches when its name, without the source prefix (the text before the first underscore,
+such as BIOCARTA or KEGG), contains the keyword. Only sets in the snapshot (at least one gene
+mapped to a UniProt accession) are candidates. The result is the sorted list of matches. A term
+with no keyword matches nothing. No synonyms, no fuzzy matching, no manual additions or removals.
+If nothing matches, the hypothesis is not testable by methods A and B and must say
+`testable: false`.
 
-- "IL-6 signaling": BIOCARTA_IL6_PATHWAY, PID_IL6_7PATHWAY, REACTOME_IL_6_SIGNALING.
-- "jak-stat signaling": KEGG_JAK_STAT_SIGNALING_PATHWAY, ST_JAK_STAT_PATHWAY.
-- "vegf signaling": BIOCARTA_VEGF_PATHWAY, KEGG_VEGF_SIGNALING_PATHWAY, PID_VEGF_VEGFR_PATHWAY,
-  REACTOME_VEGF_LIGAND_RECEPTOR_INTERACTIONS.
-- "mtor signaling": BIOCARTA_MTOR_PATHWAY, KEGG_MTOR_SIGNALING_PATHWAY, PID_MTOR_4PATHWAY,
-  REACTOME_ENERGY_DEPENDENT_REGULATION_OF_MTOR_BY_LKB1_AMPK.
-
-BIOCARTA_MTOR_PATHWAY contains FKBP1A. So under the primary (curated) definition, an mTOR
-hypothesis can reach the five FKBP1A drugs, sirolimus among them, as a tie. The rule was not
-adjusted to add or remove that set.
+On the snapshot above this reproduces the lists recorded in "MSigDB v4.0 pin" exactly for the
+configured terms: "mtor signaling" 6 sets, "IL-6 signaling" 2, "jak-stat signaling" 2,
+"vegf signaling" 6. A token-based variant was drafted first and dropped in favour of the rule
+recorded first; both were mechanical and both include BIOCARTA_MTOR_PATHWAY, the only mTOR set
+containing FKBP1A.
 
 One configuration term was changed to fit the rule: `experiments/config/real.json`
 "interleukin-6 signaling" became "IL-6 signaling", because the rule does not match spelled-out

@@ -59,46 +59,34 @@ def load_gene_sets(symbols: dict[str, set[str]], collection: str = "c2.cp",
     return sets, report
 
 
-# Pre-specified rule for mapping a hypothesis term to MSigDB v4.0 c2.cp gene sets, fixed in
-# docs/cutoff-decision.md (amendment 2026-10-04) before any lab run on real data. Do not edit:
-# a change needs a new RULE_VERSION and a new amendment.
-RULE_VERSION = "c2cp-name-tokens-v1"
+# Pre-specified rule for mapping a hypothesis term to MSigDB v4.0 c2.cp gene sets, as recorded in
+# docs/cutoff-decision.md ("MSigDB v4.0 pin": every c2.cp set whose name contains the term's
+# keyword) before any lab run on real data. Do not edit: a change needs a new RULE_VERSION and a
+# new amendment to the decision record.
+RULE_VERSION = "c2cp-name-contains-v1"
 RULE_COLLECTION = "c2.cp"
 RULE_STOPWORDS = frozenset({"SIGNALING", "SIGNALLING", "SIGNAL", "PATHWAY", "PATHWAYS", "THE",
                             "OF", "AND", "BY", "VIA", "IN"})
 
 
-def _rule_tokens(text: str) -> list[str]:
-    """Upper-case, split on non-alphanumerics, join a letter token with a following number token."""
-    raw = re.findall(r"[A-Z0-9]+", text.upper())
-    out: list[str] = []
-    for tok in raw:
-        if tok.isdigit() and out and out[-1].isalpha():
-            out[-1] += tok  # IL 6 -> IL6, so "IL-6", "IL6" and REACTOME_IL_6_... agree
-        else:
-            out.append(tok)
-    return out
-
-
-def term_tokens(term: str) -> frozenset[str]:
-    return frozenset(t for t in _rule_tokens(term) if t not in RULE_STOPWORDS)
-
-
-def set_tokens(set_name: str) -> frozenset[str]:
-    """The set name's tokens without its source prefix (BIOCARTA_, KEGG_, REACTOME_, PID_, ...)."""
-    tokens = _rule_tokens(set_name.split("_", 1)[1] if "_" in set_name else set_name)
-    return frozenset(t for t in tokens if t not in RULE_STOPWORDS)
+def term_keyword(term: str) -> str:
+    """The term's keyword: upper-case; drop separators between a letter and a digit ("IL-6" -> IL6);
+    split on other non-alphanumerics; drop RULE_STOPWORDS; join the rest with "_" ("JAK-STAT" ->
+    JAK_STAT). "" when nothing is left."""
+    text = re.sub(r"([A-Z])[^A-Z0-9]+(?=[0-9])", r"\1", term.upper())
+    return "_".join(t for t in re.findall(r"[A-Z0-9]+", text) if t not in RULE_STOPWORDS)
 
 
 def match_term(term: str, set_names) -> list[str]:
-    """Gene sets whose name contains every token of the term, sorted. [] if the term has no token.
+    """Gene sets whose name, without its source prefix, contains the term's keyword. Sorted.
 
     No synonyms, no fuzzy matching, no manual additions: "interleukin 6" does not match IL6 sets.
+    A term with no keyword matches nothing.
     """
-    wanted = term_tokens(term)
-    if not wanted:
+    keyword = term_keyword(term)
+    if not keyword:
         return []
-    return sorted(name for name in set_names if wanted <= set_tokens(name))
+    return sorted(name for name in set_names if keyword in name.split("_", 1)[-1])
 
 
 def load_from_snapshot(collection: str = "c2.cp") -> tuple[dict[str, set[str]], list[dict]]:
