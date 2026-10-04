@@ -1,6 +1,8 @@
 """Masking: opaque, unordered, one-to-one, fail-closed, and the secret stays out of git."""
 import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,6 +18,38 @@ def _snap(drugs=("CHEMBL1", "CHEMBL2", "CHEMBL3")):
     links = {"curated": [("CHEMBL1", "P62942"), ("CHEMBL2", "P05231")],
              "curated+activity": [("CHEMBL1", "P62942"), ("CHEMBL1", "P42345")]}
     return snapshot.Snapshot(2015, "h" * 64, list(drugs), links, {}, {})
+
+
+# SYSTEM and the local Administrators group are the OS itself (the NTFS equivalent of root);
+# OWNER RIGHTS (S-1-3-4) is whoever owns the object, i.e. the user who created the file.
+WINDOWS_OWNER_EQUIVALENT_SIDS = {"S-1-5-18", "S-1-5-32-544", "S-1-3-4"}
+_ACL_SCRIPT = (
+    "$me = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; "
+    "$out = @{me = $me; acl = @{}}; "
+    "foreach ($p in ($env:ACL_PATHS -split '[|]')) { "
+    "$out.acl[$p] = @((Get-Acl -LiteralPath $p).Access | "
+    "Where-Object { $_.AccessControlType -eq 'Allow' } | ForEach-Object { "
+    "$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value }) }; "
+    "$out | ConvertTo-Json -Depth 3 -Compress")
+
+
+def _readers_other_than_owner(paths: list[Path]) -> dict[str, set[str]]:
+    """Who besides the owner (and the OS) can open each path. Empty sets mean owner-only.
+
+    POSIX: any group/other permission bit. Windows: NTFS ignores chmod (Python only toggles the
+    read-only flag, so st_mode always reads 0o666 / 0o777); access is decided by the ACL, so
+    list every allowed SID except the current user and the owner-equivalent SIDs above.
+    """
+    if os.name != "nt":
+        return {str(p): {oct(p.stat().st_mode & 0o077)} if p.stat().st_mode & 0o077 else set()
+                for p in paths}
+    env = {**os.environ, "ACL_PATHS": "|".join(map(str, paths))}  # -Command ignores trailing args
+    out = subprocess.run(["powershell", "-NoProfile", "-Command", _ACL_SCRIPT],
+                         capture_output=True, text=True, check=True, env=env).stdout
+    data = json.loads(out)
+    allowed = WINDOWS_OWNER_EQUIVALENT_SIDS | {data["me"]}
+    return {p: set(sids if isinstance(sids, list) else [sids]) - allowed
+            for p, sids in data["acl"].items()}
 
 
 def _init(tmp_path, salt="test-salt", **kw):
@@ -95,12 +129,23 @@ def test_target_must_be_in_the_pool(tmp_path):
 
 def test_files_are_owner_only_and_fingerprint_hides_the_salt(tmp_path):
     _init(tmp_path)
-    assert tmp_path.stat().st_mode & 0o077 == 0
-    for f in ("mask.json", "names.json", "target.json"):
-        assert (tmp_path / f).stat().st_mode & 0o077 == 0
+    paths = [tmp_path] + [tmp_path / f for f in ("mask.json", "names.json", "target.json")]
+    assert _readers_other_than_owner(paths) == {str(p): set() for p in paths}
     fp = masking.fingerprint("test-salt")
     assert re.fullmatch(r"[0-9a-f]{8}", fp) and "test-salt" not in fp
 
+
+
+def test_the_owner_only_check_catches_a_file_others_can_read(tmp_path):
+    f = tmp_path / "leaky.json"
+    f.write_text("{}")
+    if os.name == "nt":  # grant read to the local Users group (S-1-5-32-545)
+        subprocess.run(["icacls", str(f), "/grant", "*S-1-5-32-545:(R)"], check=True,
+                       capture_output=True)
+        assert _readers_other_than_owner([f]) == {str(f): {"S-1-5-32-545"}}
+    else:
+        f.chmod(0o644)
+        assert _readers_other_than_owner([f]) == {str(f): {oct(0o044)}}
 
 def test_init_from_snapshot_finds_target_by_name_not_by_typed_id(tmp_path):
     conn = _db()
