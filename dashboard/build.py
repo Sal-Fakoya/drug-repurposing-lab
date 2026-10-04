@@ -83,6 +83,9 @@ figcaption{margin-top:.5rem;max-width:44em;color:var(--muted);font-size:.92rem}
 .empty strong{display:block;font:700 1.05rem var(--serif)}
 .empty p{margin:.25rem 0 0;max-width:56ch;color:var(--muted)}
 .pair{display:grid;gap:1rem}
+.headline{margin:1rem 0 1.4rem;border:1px solid var(--ink);padding:1rem 1.1rem;background:var(--paper)}
+.headline h3{margin:0 0 .2rem}.headline svg{width:100%;height:auto;display:block;margin-top:.6rem}
+.headline text{font:14px var(--sans);fill:var(--ink)}.headline .m{fill:var(--muted)}
 .panel{background:var(--panel);border:1px solid var(--ink);border-radius:2px;padding:1rem 1.1rem}
 .panel h3{margin:0}
 .sub{margin:.1rem 0 .8rem;color:var(--muted);font-size:.92rem}
@@ -216,7 +219,7 @@ def render_facts(prov: list[tuple[str, str]]) -> str:
 
 def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html: str,
            synthetic: bool, rows: list[dict] | None = None,
-           trail: str = "", scored: tuple[str, str] | None = None) -> str:
+           trail: str = "", scored: tuple[str, str] | None = None, headline: str = "") -> str:
     bars = f'<div class="bar banner" role="note">{e(BANNER)}</div>'
     if synthetic:
         bars += f'<div class="bar synthetic" role="alert">{e(SYNTHETIC)}</div>'
@@ -244,7 +247,7 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <p class="lede">Hypotheses, experiments and verdicts, with drug names masked.</p>{saw}</section>
 <section class="sec" id="scored"><h2>How it scored afterwards</h2>
 <p class="lede">Both analyses are reported, whatever they show. Real names and the target highlight appear only here.</p>
-<div class="pair">
+{headline}<div class="pair">
 <div class="panel"><h3>Analysis 1</h3><p class="sub">Curated drug-target links</p>{scored[0] if scored else none}</div>
 <div class="panel"><h3>Analysis 2</h3><p class="sub">Curated links plus recorded activity</p>{scored[1] if scored else none}</div></div></section>
 <section class="sec" id="provenance"><h2>Provenance</h2>{render_facts(prov)}</section>
@@ -255,7 +258,7 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 
 
 def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEAR,
-          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, trail: str = "", scored=None, limitations_path: Path = LIMITATIONS,
+          snapshot_root: Path = snapshot.SNAPSHOT_ROOT, trail: str = "", scored=None, headline: str = "", limitations_path: Path = LIMITATIONS,
           eval_dir: Path | None = None, rows: list[dict] | None = None) -> Path:
     mode = mode or lab.MODE
     if mode == "real" and eval_dir is None:
@@ -272,7 +275,7 @@ def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEA
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows,
-                          trail=trail, scored=scored),
+                          trail=trail, scored=scored, headline=headline),
                    encoding="utf-8")
     return out
 

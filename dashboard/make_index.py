@@ -62,6 +62,37 @@ def scored_html(rows, eval_rows, definition):
     return (one, other) if definition == "curated" else (other, one)
 
 
+def headline_html(rows, eval_rows):
+    """Dot plot: where the target landed in each result, 1 (best) at the left, the pool's middle in yellow."""
+    ranks = {r["res_id"]: r["target_drug_rank"] for r in eval_rows}
+    specs = {r["id"]: r["payload"] for r in rows if r["kind"] == "experiment_spec"}
+    res = [r for r in rows if r["kind"] == "result" and r["id"] in ranks]
+    if not res:
+        return ""
+    n = len(res[0]["payload"]["ranked_drugs"])
+    x0, x1, step = 70, 620, 22
+    px = lambda v: x0 + (v - 1) / (n - 1) * (x1 - x0)  # noqa: E731
+    h = 40 + step * len(res)
+    best = min(ranks[r["id"]] for r in res)
+    middle = sum(0.4 * n <= ranks[r["id"]] <= 0.6 * n for r in res)
+    g = [f'<rect x="{px(0.4 * n):.0f}" y="24" width="{px(0.6 * n) - px(0.4 * n):.0f}" height="{step * len(res)}" fill="var(--mark)"/>']
+    for i, r in enumerate(res):
+        y = 24 + step * i + step / 2
+        v = ranks[r["id"]]
+        ctrl = specs.get(r["payload"]["exp_id"], {}).get("hyp_id") == "negative_control"
+        fill = "var(--paper)" if ctrl else ("var(--signal)" if v == best else "var(--ink)")
+        g.append(f'<text class="m" x="0" y="{y + 5:.0f}">{e(r["id"])}</text>'
+                 f'<line x1="{x0}" x2="{x1}" y1="{y:.0f}" y2="{y:.0f}" stroke="var(--soft)"/>'
+                 f'<circle cx="{px(v):.0f}" cy="{y:.0f}" r="6" fill="{fill}" stroke="var(--ink)" stroke-width="1.5"/>')
+    g.append(f'<text class="m" x="{x0}" y="14">1 (best)</text><text class="m" x="{x1}" y="14" text-anchor="end">{n} (worst)</text>'
+             f'<text class="m" x="{(x0 + x1) / 2:.0f}" y="14" text-anchor="middle">pool middle</text>')
+    svg = (f'<svg viewBox="0 0 640 {h}" role="img" aria-label="Target rank per result, out of {n} drugs">'
+           + "".join(g) + "</svg>")
+    return (f'<figure class="headline"><h3>Where the target landed</h3>'
+            f'<p class="sub">{middle} of {len(res)} results left the target near the middle of {n} drugs, '
+            f'in the tie group. Best: rank {best:g}. Hollow dot: negative control.</p>{svg}</figure>')
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("ledger_dir", type=Path)
@@ -75,5 +106,5 @@ if __name__ == "__main__":
     ev = _jsonl(a.ledger_dir / "eval_only.jsonl")
     note = '<p class="lede">' + e(a.note) + "</p>" if a.note else ""
     out = b.build(a.out, "real", snapshot_root=a.snapshot_root, eval_dir=a.eval_dir, rows=rows,
-                  trail=note + trail_html(rows), scored=scored_html(rows, ev, a.definition))
+                  trail=note + trail_html(rows), scored=scored_html(rows, ev, a.definition), headline=headline_html(rows, ev))
     print(f"wrote {out}")

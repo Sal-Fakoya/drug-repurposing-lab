@@ -206,3 +206,13 @@ def test_make_index_shows_trail_and_target_rank_but_no_payload_secrets():
     assert "&lt;b&gt;IL-6" in trail and "supported (z=3.2)" in trail
     assert "2 of 3" in a1 and "Not run in this build" in a2
     assert "Not run in this build" in mi.scored_html(rows, ev, "curated+activity")[0]
+
+
+def test_headline_chart_is_inline_svg_with_one_dot_per_result():
+    spec = importlib.util.spec_from_file_location("make_index", ROOT / "dashboard" / "make_index.py")
+    mi = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mi)
+    rows = [{"id": "exp_001", "kind": "experiment_spec", "payload": {"hyp_id": "h", "method": "A"}},
+            {"id": "res_001", "kind": "result", "payload": {"exp_id": "exp_001", "ranked_drugs": [{}] * 100}}]
+    html = mi.headline_html(rows, [{"res_id": "res_001", "target_drug_rank": 50.0}])
+    assert html.count("<circle") == 1 and "<svg" in html and "http" not in html
