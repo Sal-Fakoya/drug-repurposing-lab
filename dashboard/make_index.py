@@ -1,7 +1,7 @@
 """Build the single-file demo page from a finished run: python dashboard/make_index.py LEDGER_DIR --out index.html
 
 LEDGER_DIR holds ledger.jsonl (masked) and eval_only.jsonl (target ranks). Shows hypotheses, experiments and
-the target's post-hoc rank. No gene sets, no evidence text, no drug names (the approval gate has not run).
+the target's post-hoc rank. No gene sets, no evidence text, no drug names.
 """
 import argparse
 import importlib.util
@@ -56,7 +56,7 @@ def scored_html(rows, eval_rows, definition):
     top = (f"<p>Target mid-rank, best <strong>{min(vals):g}</strong>, median <strong>{statistics.median(vals):g}</strong> "
            "across hypothesis experiments (rank 1 is best; ties share a mid-rank).</p>") if vals else ""
     one = (f"{top}<table><tr><th>result</th><th>hypothesis</th><th>method</th><th>target mid-rank</th><th></th></tr>"
-           f"{lines}</table><p class=\"sub\">Drug names are withheld: the human approval gate has not been passed. "
+           f"{lines}</table><p class=\"sub\">Drug names are not shown on this page. "
            f"Link definition: {e(definition)}. One run, one seed, not replicated.</p>")
     other = '<div class="empty"><strong>Not run in this build</strong><p>Reported as not run, not omitted.</p></div>'
     return (one, other) if definition == "curated" else (other, one)
@@ -73,4 +73,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     rows = _jsonl(a.ledger_dir / "ledger.jsonl")
     ev = _jsonl(a.ledger_dir / "eval_only.jsonl")
-    print(f"wrote {b.build(a.out, 'real', snapshot_root=a.snapshot_root, eval_dir=a.eval_dir, rows=rows, trail=(f'<p class="lede">{e(a.note)}</p>' if a.note else '') + trail_html(rows), scored=scored_html(rows, ev, a.definition))}")
+    note = '<p class="lede">' + e(a.note) + "</p>" if a.note else ""
+    out = b.build(a.out, "real", snapshot_root=a.snapshot_root, eval_dir=a.eval_dir, rows=rows,
+                  trail=note + trail_html(rows), scored=scored_html(rows, ev, a.definition))
+    print(f"wrote {out}")
