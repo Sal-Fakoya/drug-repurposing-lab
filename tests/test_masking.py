@@ -268,7 +268,7 @@ def test_command_line_init_still_refuses_to_replace_an_existing_mask(tmp_path, m
     monkeypatch.setattr(masking, "EVAL_DIR", tmp_path / "A")
     monkeypatch.setattr(masking.snapshot_mod, "load", lambda: snap)
     monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
-    with pytest.raises(FileExistsError):
+    with pytest.raises(SystemExit, match="error: .*exists"):
         masking.main(["init"])
 
 
@@ -285,3 +285,86 @@ def test_restore_accepts_a_mask_made_for_a_larger_pool(tmp_path):
     b = masking.load(tmp_path / "B")
     assert b.mask("CHEMBL4") == masking.load(tmp_path / "A").mask("CHEMBL4")
     assert [p["drug_id"] for p in b.masked_pool(smaller)] == sorted(b.mask(d) for d in ("CHEMBL1", "CHEMBL4"))
+
+
+# ---- one salt only: a safe default location and an init that refuses a second one ----
+
+def _cli_env(tmp_path, monkeypatch, snap):
+    monkeypatch.setattr(masking, "EVAL_DIR", tmp_path / "eval")
+    monkeypatch.setattr(masking, "HOME_DIR", tmp_path / "home")
+    monkeypatch.setattr(masking, "LEGACY_DIR", tmp_path / "legacy")
+    monkeypatch.setattr(masking.snapshot_mod, "load", lambda: snap)
+    monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
+
+
+def test_default_eval_dir_is_outside_the_repo_and_overridable(tmp_path):
+    assert masking.default_eval_dir({}) == masking.HOME_DIR
+    assert masking.HOME_DIR.name == ".drug_lab_eval" and masking.HOME_DIR.parent == Path.home()
+    assert masking.default_eval_dir({"LAB_EVAL_DIR": str(tmp_path)}) == tmp_path
+    repo = Path(masking.__file__).resolve().parent.parent
+    assert repo not in masking.HOME_DIR.parents
+
+
+@pytest.mark.parametrize("where", ["home", "legacy"])
+def test_init_refuses_a_second_salt_at_another_known_location(tmp_path, monkeypatch, where):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    _cli_env(tmp_path, monkeypatch, snap)
+    (tmp_path / where).mkdir()
+    (tmp_path / where / "mask.json").write_text("{}")
+    with pytest.raises(SystemExit, match="two salts"):
+        masking.main(["init"])
+    assert not (tmp_path / "eval").exists()                 # nothing was created
+
+
+def test_init_works_when_no_other_mask_exists_and_restore_ignores_the_check(tmp_path, monkeypatch, capsys):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    _cli_env(tmp_path, monkeypatch, snap)
+    masking.main(["init"])
+    assert (tmp_path / "eval" / "mask.json").exists()
+    (tmp_path / "legacy").mkdir()
+    (tmp_path / "legacy" / "mask.json").write_text("{}")            # a stray elsewhere does not block restore
+    (tmp_path / "eval" / "names.json").unlink()
+    (tmp_path / "eval" / "target.json").unlink()
+    masking.main(["restore"])
+    assert masking.load(tmp_path / "eval").target_chembl_id == "CHEMBL1"
+    assert "salt fingerprint" in capsys.readouterr().out
+
+
+def test_other_masks_does_not_count_the_folder_in_use(tmp_path, monkeypatch):
+    monkeypatch.setattr(masking, "HOME_DIR", tmp_path / "home")
+    monkeypatch.setattr(masking, "LEGACY_DIR", tmp_path / "legacy")
+    (tmp_path / "home").mkdir()
+    (tmp_path / "home" / "mask.json").write_text("{}")
+    assert masking.other_masks(tmp_path / "home") == []              # it IS the folder in use
+    assert masking.other_masks(tmp_path / "elsewhere") == [tmp_path / "home" / "mask.json"]
+
+
+def test_forced_rotation_keeps_the_old_salt_as_a_backup(tmp_path):
+    """--force must never be able to lose a shared salt."""
+    _init(tmp_path, salt="shared-salt")
+    old_ids = {d: masking.masked_id("shared-salt", d) for d in ("CHEMBL1", "CHEMBL2")}
+    _init(tmp_path, salt="new-salt", force=True)
+    backup = tmp_path / f"mask.{masking.fingerprint('shared-salt')}.bak.json"
+    assert backup.exists() and json.loads(backup.read_text())["salt"] == "shared-salt"
+    assert masking.load(tmp_path).mask("CHEMBL1") != old_ids["CHEMBL1"]       # rotation really happened
+    assert not json.loads((tmp_path / "mask.json").read_text())["salt"] == "shared-salt"
+
+
+def test_first_init_makes_no_backup_and_the_backup_is_owner_only(tmp_path):
+    _init(tmp_path)
+    assert [p.name for p in tmp_path.iterdir() if ".bak." in p.name] == []
+    _init(tmp_path, salt="other", force=True)
+    (backup,) = [p for p in tmp_path.iterdir() if ".bak." in p.name]
+    if os.name != "nt":
+        assert backup.stat().st_mode & 0o077 == 0
+
+
+def test_command_line_force_prints_where_the_old_mask_went_and_never_the_salt(tmp_path, monkeypatch, capsys):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    _cli_env(tmp_path, monkeypatch, snap)
+    masking.main(["init"])
+    capsys.readouterr()
+    masking.main(["init", "--force"])
+    out = capsys.readouterr().out
+    assert "kept as mask.<fingerprint>.bak.json" in out and "salt fingerprint" in out
+    assert json.loads((tmp_path / "eval" / "mask.json").read_text())["salt"] not in out

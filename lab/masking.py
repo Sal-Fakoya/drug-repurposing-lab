@@ -2,17 +2,18 @@
 
 masked id = "m_" + first ID_HEX hex digits of HMAC-SHA256(salt, chembl_id). Opaque, deterministic
 for a given salt, and unordered (ChEMBL ids rise roughly with registration date, so an id that
-sorted like them would leak). The salt is a secret: it lives only in data/eval_only/ (git-ignored),
-which no agent tool may read.
+sorted like them would leak). The salt is a secret that no agent tool may read. It lives in the
+eval folder, by default ~/.drug_lab_eval (override with LAB_EVAL_DIR):
 
-  data/eval_only/mask.json    {"salt", "snapshot_sha256", "map": {masked: chembl_id}}
-  data/eval_only/names.json   {chembl_id: display name}   used only to publish an approved ranking
-  data/eval_only/target.json  {"target_chembl_id": ...}   the pre-registered target drug
+  <eval folder>/mask.json    {"salt", "snapshot_sha256", "map": {masked: chembl_id}}
+  <eval folder>/names.json   {chembl_id: display name}   used only to publish an approved ranking
+  <eval folder>/target.json  {"target_chembl_id": ...}   the pre-registered target drug
 
-Create them once with `python -m lab.masking` (init). On another machine, copy the mask.json you
-were sent into the eval folder and run `python -m lab.masking restore`: never init, it makes a new salt. Set LAB_EVAL_DIR to keep them outside the repo, on a
-filesystem that enforces owner-only permissions (the files are chmod 600). A different salt gives different ids for every drug,
-so share mask.json (privately, not via git) to get identical ids on two machines.
+First time, on ONE machine:  python -m lab.masking          (init: makes the salt)
+Every other machine: copy the mask.json you were sent (privately, never via git) into the eval
+folder, then  python -m lab.masking restore.  Never run init there: a second salt gives different
+masked ids for every drug, so `init` refuses if a mask.json already exists at any known location.
+The files are chmod 600; keep the folder on a filesystem that enforces modes.
 """
 import hashlib
 import hmac
@@ -25,8 +26,18 @@ from pathlib import Path
 
 from lab import snapshot as snapshot_mod
 
-# LAB_EVAL_DIR moves the secret off a filesystem that ignores file modes (e.g. NTFS/FAT mounts).
-EVAL_DIR = Path(os.environ.get("LAB_EVAL_DIR") or Path(__file__).resolve().parent.parent / "data" / "eval_only")
+# The secret lives OUTSIDE the repo by default, in ~/.drug_lab_eval, on a filesystem that enforces
+# file modes (a /mnt or NTFS/FAT mount ignores chmod). LAB_EVAL_DIR overrides it. The old in-repo
+# folder is only checked, so `init` can refuse to create a second salt next to an existing one.
+HOME_DIR = Path.home() / ".drug_lab_eval"
+LEGACY_DIR = Path(__file__).resolve().parent.parent / "data" / "eval_only"
+
+
+def default_eval_dir(environ=os.environ) -> Path:
+    return Path(environ.get("LAB_EVAL_DIR") or HOME_DIR)
+
+
+EVAL_DIR = default_eval_dir()
 ID_HEX = 10          # 40 bits: collisions among ~2000 drugs are ~1e-6, and init() checks anyway
 TARGET_NAME = "sirolimus"   # the pre-registered target drug (docs/cutoff-decision.md)
 
@@ -45,11 +56,14 @@ def init(drugs: list[str], names: dict[str, str], target_chembl_id: str, snapsho
     """Write the eval-only files and return the salt fingerprint. Refuses to replace an existing mask.
 
     Replacing the salt silently renames every drug, which would orphan every ledger row, so it needs
-    force=True.
+    force=True, and even then the old mask.json is kept as mask.<fingerprint>.bak.json first, so a
+    shared salt can never be lost by a rotation.
     """
     eval_dir = Path(eval_dir)
-    if (eval_dir / "mask.json").exists() and not force:
-        raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True (CLI: --force) to rotate the salt")
+    if (eval_dir / "mask.json").exists():
+        if not force:
+            raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True (CLI: --force) to rotate the salt")
+        backup_mask(eval_dir)
     if target_chembl_id not in drugs:
         raise ValueError(f"target {target_chembl_id} is not in the drug pool")
     salt = salt or secrets.token_hex(32)
@@ -62,6 +76,17 @@ def init(drugs: list[str], names: dict[str, str], target_chembl_id: str, snapsho
     _write_private(eval_dir / "names.json", {d: names.get(d) or d for d in drugs})
     _write_private(eval_dir / "target.json", {"target_chembl_id": target_chembl_id})
     return fingerprint(salt)
+
+
+def backup_mask(eval_dir: Path) -> Path | None:
+    """Copy an existing mask.json to mask.<fingerprint>.bak.json (owner-only). None if there is none."""
+    src = Path(eval_dir) / "mask.json"
+    if not src.exists():
+        return None
+    old = json.loads(src.read_text())
+    dest = Path(eval_dir) / f"mask.{fingerprint(old['salt'])}.bak.json"
+    _write_private(dest, old)
+    return dest
 
 
 def fingerprint(salt: str) -> str:
@@ -162,6 +187,13 @@ def restore_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EV
     return fingerprint(given["salt"])
 
 
+def other_masks(eval_dir: Path) -> list[Path]:
+    """mask.json files at the other known locations (home folder, old in-repo folder)."""
+    here = Path(eval_dir).resolve()
+    return [p for p in (HOME_DIR / "mask.json", LEGACY_DIR / "mask.json")
+            if p.exists() and p.parent.resolve() != here]
+
+
 def main(argv: list[str] | None = None) -> None:
     import argparse
 
@@ -172,12 +204,20 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--force", action="store_true",
                     help="init: rotate the salt, renaming every drug. restore: overwrite names.json/target.json")
     args = ap.parse_args(argv)
-    run = restore_from_snapshot if args.command == "restore" else init_from_snapshot
-    if args.command == "init" and args.force:
-        print("rotating the salt: every masked id changes")
-    fp = run(snapshot_mod.load(), chembl.connect(), eval_dir=EVAL_DIR, force=args.force)
+    try:
+        if args.command == "init" and (others := other_masks(EVAL_DIR)):
+            raise FileExistsError(
+                f"another mask.json already exists at {[str(p) for p in others]}. A second one means two "
+                f"salts and different masked ids. Use that folder (set LAB_EVAL_DIR to it), or, if it is "
+                f"a mistake, delete it first. To use a mask someone sent you, run `restore`, not `init`.")
+        run = restore_from_snapshot if args.command == "restore" else init_from_snapshot
+        if args.command == "init" and args.force and (EVAL_DIR / "mask.json").exists():
+            print("rotating the salt: every masked id changes. The old mask.json is kept as "
+                  f"mask.<fingerprint>.bak.json in {EVAL_DIR}; delete it only if no ledger row or shared copy needs it.")
+        fp = run(snapshot_mod.load(), chembl.connect(), eval_dir=EVAL_DIR, force=args.force)
+    except (FileExistsError, FileNotFoundError, ValueError) as exc:
+        raise SystemExit(f"error: {exc}") from None
     print(f"{args.command} done in {EVAL_DIR}  salt fingerprint {fp}  (the salt itself is never printed)")
-
 
 if __name__ == "__main__":
     main()
