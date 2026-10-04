@@ -13,3 +13,4 @@ data/raw/
 *.tar.gz
 data/*_records*.tsv
 data/eval_only/
+dashboard/out/
