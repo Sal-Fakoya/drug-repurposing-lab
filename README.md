@@ -8,6 +8,21 @@ ranks the known drug compared with baselines.
 
 > Agent-generated hypotheses. Not medical advice. Needs laboratory and clinical validation.
 
+## Live demo and status (4 Oct 2026)
+
+Dashboard: https://drug-repurposing-lab.netlify.app/ (a static page built from one real run, with names withheld).
+
+What it shows: one real run on the pinned ChEMBL 19 and MSigDB v4.0 snapshot (cutoff 2015, curated links, method A only, 1,146-drug pool). Across 20 results the target's mid-rank stayed in the large tie group near the middle of the pool in 19, and was rank 6 in one. The lab did not rediscover the answer in this run. Treat it as a first, unreplicated result, not a finding.
+
+Not done yet:
+- Real-mode scoring is in PR #31 (open). The run above used that branch.
+- Analysis 2 (curated plus recorded activity) has not been run.
+- Method A failed its own negative control (top score about 1.9, above the 1.0 threshold), and `compile_final_ranking` still includes results from a method whose control failed.
+- The Haiku 4.5 director over-reports ("no contradictions", "all checks passed"); read the ledger, not the narration.
+- Method B has no real loader. The canary check and the LLM-only baseline are not done (`LIMITATIONS.md`).
+- Open PRs: #26, #29, #30 (masking default, decision-record follow-ups, limitations), #34 (dashboard footer), and the dashboard tabs and chart branch `claude/dashboard-index`.
+- Do not publish MSigDB-derived content: the legacy licence is for internal research only.
+
 ## How the layers fit together
 
 | Layer | Lives in | Does | Never does |
@@ -49,8 +64,8 @@ docs did not settle for us.
 Verified here: schemas, ledger validation, policy verdicts, bandit determinism, masking, the
 planner never seeing the target rank, tool allowlists in the YAML (all in `tests/`).
 
-Not verified: running the YAML in Omnigent, the real Europe PMC path (`MODE=real`), the real
-data loaders (not written yet), and the Omnigent behaviors listed in `agents/README.md`.
+Not verified: the Omnigent behaviors listed in `agents/README.md`, and any result beyond the single run
+described above. The real data loaders and the snapshot are written and tested.
 
 ## Cutoff convention
 
