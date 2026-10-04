@@ -77,3 +77,19 @@ def drug_target_links(conn: sqlite3.Connection, definition: str,
         pairs |= set(conn.execute(ACTIVITY_SQL, (cutoff_year,)))
     ids = _chembl_ids(conn)
     return sorted((ids[m], acc) for m, acc in pairs)
+
+
+def symbol_map(conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """Upper-cased human gene symbol -> UniProt accessions, from ChEMBL 19's own synonyms (July 2014).
+
+    Symbols are trimmed (some carry a trailing space). A symbol with several accessions is an
+    alias shared by different genes: callers must treat it as ambiguous, not pick one.
+    """
+    out: dict[str, set[str]] = {}
+    for sym, acc in conn.execute("""
+            SELECT UPPER(TRIM(s.component_synonym)), cs.accession
+            FROM component_synonyms s JOIN component_sequences cs ON cs.component_id = s.component_id
+            WHERE s.syn_type = 'GENE_SYMBOL' AND TRIM(COALESCE(s.component_synonym, '')) != ''
+              AND cs.organism = 'Homo sapiens' AND cs.accession IS NOT NULL"""):
+        out.setdefault(sym, set()).add(acc)
+    return out
