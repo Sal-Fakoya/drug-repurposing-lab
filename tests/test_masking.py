@@ -285,3 +285,55 @@ def test_restore_accepts_a_mask_made_for_a_larger_pool(tmp_path):
     b = masking.load(tmp_path / "B")
     assert b.mask("CHEMBL4") == masking.load(tmp_path / "A").mask("CHEMBL4")
     assert [p["drug_id"] for p in b.masked_pool(smaller)] == sorted(b.mask(d) for d in ("CHEMBL1", "CHEMBL4"))
+
+
+# ---- one salt only: a safe default location and an init that refuses a second one ----
+
+def _cli_env(tmp_path, monkeypatch, snap):
+    monkeypatch.setattr(masking, "EVAL_DIR", tmp_path / "eval")
+    monkeypatch.setattr(masking, "HOME_DIR", tmp_path / "home")
+    monkeypatch.setattr(masking, "LEGACY_DIR", tmp_path / "legacy")
+    monkeypatch.setattr(masking.snapshot_mod, "load", lambda: snap)
+    monkeypatch.setattr("lab.chembl.connect", _conn_with_target)
+
+
+def test_default_eval_dir_is_outside_the_repo_and_overridable(tmp_path):
+    assert masking.default_eval_dir({}) == masking.HOME_DIR
+    assert masking.HOME_DIR.name == ".drug_lab_eval" and masking.HOME_DIR.parent == Path.home()
+    assert masking.default_eval_dir({"LAB_EVAL_DIR": str(tmp_path)}) == tmp_path
+    repo = Path(masking.__file__).resolve().parent.parent
+    assert repo not in masking.HOME_DIR.parents
+
+
+@pytest.mark.parametrize("where", ["home", "legacy"])
+def test_init_refuses_a_second_salt_at_another_known_location(tmp_path, monkeypatch, where):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    _cli_env(tmp_path, monkeypatch, snap)
+    (tmp_path / where).mkdir()
+    (tmp_path / where / "mask.json").write_text("{}")
+    with pytest.raises(FileExistsError, match="two salts"):
+        masking.main(["init"])
+    assert not (tmp_path / "eval").exists()                 # nothing was created
+
+
+def test_init_works_when_no_other_mask_exists_and_restore_ignores_the_check(tmp_path, monkeypatch, capsys):
+    snap = _snap(drugs=("CHEMBL1", "CHEMBL4"))
+    _cli_env(tmp_path, monkeypatch, snap)
+    masking.main(["init"])
+    assert (tmp_path / "eval" / "mask.json").exists()
+    (tmp_path / "legacy").mkdir()
+    (tmp_path / "legacy" / "mask.json").write_text("{}")            # a stray elsewhere does not block restore
+    (tmp_path / "eval" / "names.json").unlink()
+    (tmp_path / "eval" / "target.json").unlink()
+    masking.main(["restore"])
+    assert masking.load(tmp_path / "eval").target_chembl_id == "CHEMBL1"
+    assert "salt fingerprint" in capsys.readouterr().out
+
+
+def test_other_masks_does_not_count_the_folder_in_use(tmp_path, monkeypatch):
+    monkeypatch.setattr(masking, "HOME_DIR", tmp_path / "home")
+    monkeypatch.setattr(masking, "LEGACY_DIR", tmp_path / "legacy")
+    (tmp_path / "home").mkdir()
+    (tmp_path / "home" / "mask.json").write_text("{}")
+    assert masking.other_masks(tmp_path / "home") == []              # it IS the folder in use
+    assert masking.other_masks(tmp_path / "elsewhere") == [tmp_path / "home" / "mask.json"]
