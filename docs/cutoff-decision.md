@@ -143,7 +143,7 @@ what any individual did.
 - Secondary: best mid-rank among the rapamycin analogues (sirolimus, everolimus, temsirolimus).
 - Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
 - Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
-- Decided on ________ by ________ and ________.
+- Decided on Oct 4 by Thierry and Sal.
 
 ## ChEMBL 19 pin (scripts/check_chembl.sql and check_chembl_mtor.sql)
 
@@ -253,7 +253,7 @@ what any individual did.
 - Run under both link definitions above.
 - Baselines: random order (many seeds), literature co-occurrence, LLM-only, no-reopen ablation.
 - Outcome categories: sirolimus in top 10 / another rapamycin analogue in top 10 / neither.
-- Decided on ________ by ________ and ________.
+- Decided on Oct 4 by Thierry and Sal.
 
 ## Amendment, 2026-10-04: feasibility check, analysis roles, gene-set rule
 
