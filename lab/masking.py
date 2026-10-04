@@ -9,7 +9,8 @@ which no agent tool may read.
   data/eval_only/names.json   {chembl_id: display name}   used only to publish an approved ranking
   data/eval_only/target.json  {"target_chembl_id": ...}   the pre-registered target drug
 
-Create them once with `python -m lab.masking`. Set LAB_EVAL_DIR to keep them outside the repo, on a
+Create them once with `python -m lab.masking` (init). On another machine, copy the mask.json you
+were sent into the eval folder and run `python -m lab.masking restore`: never init, it makes a new salt. Set LAB_EVAL_DIR to keep them outside the repo, on a
 filesystem that enforces owner-only permissions (the files are chmod 600). A different salt gives different ids for every drug,
 so share mask.json (privately, not via git) to get identical ids on two machines.
 """
@@ -48,7 +49,7 @@ def init(drugs: list[str], names: dict[str, str], target_chembl_id: str, snapsho
     """
     eval_dir = Path(eval_dir)
     if (eval_dir / "mask.json").exists() and not force:
-        raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True to rotate the salt")
+        raise FileExistsError(f"{eval_dir / 'mask.json'} exists; pass force=True (CLI: --force) to rotate the salt")
     if target_chembl_id not in drugs:
         raise ValueError(f"target {target_chembl_id} is not in the drug pool")
     salt = salt or secrets.token_hex(32)
@@ -117,20 +118,64 @@ def load(eval_dir: Path = EVAL_DIR) -> Mask:
     return Mask(m["salt"], m["map"], names, target)
 
 
-def init_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EVAL_DIR,
-                       salt: str | None = None, force: bool = False) -> str:
+def _names_and_target(snap: snapshot_mod.Snapshot, conn) -> tuple[dict[str, str], str]:
     """Names and the target id come from the pinned ChEMBL 19 database (found by name, not typed in)."""
     rows = dict(conn.execute("SELECT chembl_id, pref_name FROM molecule_dictionary"))
     target = [c for c, n in rows.items() if (n or "").lower() == TARGET_NAME and c in snap.drugs]
     if len(target) != 1:
         raise ValueError(f"expected exactly one approved parent named {TARGET_NAME!r}, got {target}")
-    return init(snap.drugs, {d: (rows.get(d) or "") for d in snap.drugs}, target[0], snap.sha256,
-                eval_dir, salt, force)
+    return {d: (rows.get(d) or "") for d in snap.drugs}, target[0]
+
+
+def init_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EVAL_DIR,
+                       salt: str | None = None, force: bool = False) -> str:
+    names, target = _names_and_target(snap, conn)
+    return init(snap.drugs, names, target, snap.sha256, eval_dir, salt, force)
+
+
+def restore_from_snapshot(snap: snapshot_mod.Snapshot, conn, eval_dir: Path = EVAL_DIR,
+                          force: bool = False) -> str:
+    """Rebuild names.json and target.json next to a mask.json you were given. The salt is NOT changed.
+
+    Use this on a second machine: copy mask.json (privately) into the eval folder, then restore. It
+    first checks that the salt reproduces mask.json's own id map for THIS snapshot, so a wrong
+    snapshot, a wrong cutoff or a corrupted file is refused instead of silently giving other ids.
+    """
+    eval_dir = Path(eval_dir)
+    try:
+        given = json.loads((eval_dir / "mask.json").read_text())
+    except FileNotFoundError as exc:
+        raise FileNotFoundError(f"{exc.filename} missing: copy the mask.json you were sent into "
+                                f"{eval_dir} first (do NOT run init: it would create a different salt)") from exc
+    expected = {masked_id(given["salt"], d): d for d in snap.drugs}
+    if expected != given["map"]:
+        raise ValueError("mask.json does not match this snapshot: the salt, the cutoff or the "
+                         "snapshot differs from the one it was made for. Nothing was written.")
+    existing = [f for f in ("names.json", "target.json") if (eval_dir / f).exists()]
+    if existing and not force:
+        raise FileExistsError(f"{existing} already in {eval_dir}; pass --force to rebuild them")
+    names, target = _names_and_target(snap, conn)
+    _write_private(eval_dir / "names.json", {d: names.get(d) or d for d in snap.drugs})
+    _write_private(eval_dir / "target.json", {"target_chembl_id": target})
+    return fingerprint(given["salt"])
+
+
+def main(argv: list[str] | None = None) -> None:
+    import argparse
+
+    from lab import chembl
+    ap = argparse.ArgumentParser(description="Create or restore the eval-only masking files.")
+    ap.add_argument("command", choices=["init", "restore"], nargs="?", default="init",
+                    help="init: new salt (first time only). restore: rebuild names/target from a mask.json you were given")
+    ap.add_argument("--force", action="store_true",
+                    help="init: rotate the salt, renaming every drug. restore: overwrite names.json/target.json")
+    args = ap.parse_args(argv)
+    run = restore_from_snapshot if args.command == "restore" else init_from_snapshot
+    if args.command == "init" and args.force:
+        print("rotating the salt: every masked id changes")
+    fp = run(snapshot_mod.load(), chembl.connect(), eval_dir=EVAL_DIR, force=args.force)
+    print(f"{args.command} done in {EVAL_DIR}  salt fingerprint {fp}  (the salt itself is never printed)")
 
 
 if __name__ == "__main__":
-    from lab import chembl
-    if os.environ.get("MASK_FORCE") == "1":
-        print("rotating the salt: every masked id changes")
-    fp = init_from_snapshot(snapshot_mod.load(), chembl.connect(), force=os.environ.get("MASK_FORCE") == "1")
-    print(f"wrote {EVAL_DIR}  salt fingerprint {fp}  (the salt itself is never printed)")
+    main()

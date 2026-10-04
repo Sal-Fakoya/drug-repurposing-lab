@@ -3,7 +3,10 @@
     python dashboard/build.py [--mode toy|real] [--out dashboard/out/index.html]
 
 Skeleton: safety banner, SYNTHETIC bar, provenance (from the verified snapshot manifest) and the
-limitations. Results, ranking and the reasoning trail are added in later steps. Everything that
+limitations. The page-wide SYNTHETIC bar shows if the mode is toy OR any loaded ledger row is
+synthetic (a row with no `synthetic` field counts as synthetic: unknown provenance is flagged), and
+each synthetic row carries its own tag. Note `synthetic` comes from LAB_MODE: it flags the run mode,
+not each source. Results, ranking and the reasoning trail are added in later steps. Everything that
 comes from a file is HTML-escaped: Europe PMC text will be untrusted. Only the salt FINGERPRINT is
 ever shown; the salt and the eval-only files are never read for content.
 """
@@ -22,6 +25,7 @@ BANNER = "Agent-generated hypotheses. Not medical advice. Needs laboratory and c
 SYNTHETIC = "SYNTHETIC DATA: this is not a finding."
 QUESTION = ("For patients whose idiopathic multicentric Castleman disease does not respond to IL-6 "
             "blockade, which approved drug should be tested next?")
+SYNTHETIC_TAG = '<span class="tag">synthetic</span>'
 OUT = ROOT / "dashboard" / "out" / "index.html"
 LIMITATIONS = ROOT / "LIMITATIONS.md"
 
@@ -43,6 +47,7 @@ table{width:100%;border-collapse:collapse;background:var(--card);border:1px soli
 th,td{text-align:left;padding:.5rem .7rem;border-bottom:1px solid var(--line);vertical-align:top}
 th{width:13rem;color:var(--muted);font-weight:600}td{overflow-wrap:anywhere}code{font-size:.9em}
 .pending{background:var(--card);border:1px dashed var(--line);padding:.8rem 1rem;color:var(--muted)}
+.tag{background:var(--warn-bg);color:var(--warn);padding:0 .35rem;border-radius:3px;font-size:.8em}
 .todo{background:var(--warn-bg);color:var(--warn);padding:0 .35rem;border-radius:3px;font-size:.8em;margin-left:.4rem}
 li{margin:.25rem 0}@media print{.bars{position:static}}
 """
@@ -98,8 +103,27 @@ def render_markdown(text: str) -> tuple[str, int]:
     return "\n".join(out), todos
 
 
+def is_synthetic(row: dict) -> bool:
+    return bool(row.get("synthetic", True))     # fail safe: a row that does not say is flagged
+
+
+def check_rows(rows: list[dict]) -> None:
+    for r in rows:
+        if not isinstance(r, dict) or "id" not in r or "kind" not in r:
+            raise ValueError(f"ledger row needs an id and a kind: {str(r)[:80]!r}")
+
+
+def render_rows(rows: list[dict]) -> str:
+    """Envelope fields only (never the payload), each synthetic row tagged."""
+    body = "".join(
+        f"<tr><td><code>{e(r['id'])}</code></td><td>{e(r['kind'])}</td><td>{e(r.get('agent') or '')}</td>"
+        f"<td>{SYNTHETIC_TAG if is_synthetic(r) else ''}</td></tr>" for r in rows)
+    return ("<h2>Ledger rows loaded</h2><table><tr><th>id</th><th>kind</th><th>agent</th><th></th></tr>"
+            f"{body}</table>")
+
+
 def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html: str,
-           synthetic: bool) -> str:
+           synthetic: bool, rows: list[dict] | None = None) -> str:
     bars = f'<div class="bar banner" role="note">{e(BANNER)}</div>'
     if synthetic:
         bars += f'<div class="bar synthetic" role="alert">{e(SYNTHETIC)}</div>'
@@ -113,6 +137,7 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 <p class="q">{e(QUESTION)}</p>
 <h2>Results, ranking and reasoning trail</h2>
 <div class="pending">Not available yet. These sections are added once real runs exist for both analyses.</div>
+{render_rows(rows) if rows else ''}
 <h2>Provenance</h2>
 <table>{table}</table>
 <h2>Limitations</h2>
@@ -123,18 +148,23 @@ def render(mode: str, cutoff: int, prov: list[tuple[str, str]], limitations_html
 
 def build(out: Path = OUT, mode: str | None = None, cutoff: int = lab.CUTOFF_YEAR,
           snapshot_root: Path = snapshot.SNAPSHOT_ROOT, limitations_path: Path = LIMITATIONS,
-          eval_dir: Path | None = None) -> Path:
+          eval_dir: Path | None = None, rows: list[dict] | None = None) -> Path:
     mode = mode or lab.MODE
     if mode == "real" and eval_dir is None:
         eval_dir = masking.EVAL_DIR
+    rows = rows or []
+    check_rows(rows)
     prov = provenance(mode, cutoff, snapshot_root, eval_dir if mode == "real" else None)
+    if rows:
+        prov.append(("Ledger rows", f"{len(rows)} loaded, {sum(map(is_synthetic, rows))} synthetic"))
     limits, todos = render_markdown(Path(limitations_path).read_text(encoding="utf-8"))
     if todos:
         print(f"warning: {todos} TODO line(s) in {limitations_path.name} are shown on the dashboard",
               file=sys.stderr)
     out = Path(out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy")), encoding="utf-8")
+    out.write_text(render(mode, cutoff, prov, limits, synthetic=(mode == "toy" or any(map(is_synthetic, rows))), rows=rows),
+                   encoding="utf-8")
     return out
 
 
