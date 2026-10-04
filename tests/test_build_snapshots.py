@@ -88,7 +88,7 @@ def test_gene_sets_keep_every_symbol_and_label_the_mapping(built):
     a = g[(g["collection"] == "c2.cp") & (g["set_name"] == "SET_A")].set_index("gene_symbol")
     assert a.loc["MTOR", "uniprot_accession"] == "P42345" and a.loc["MTOR", "mapping"] == "mapped"
     assert a.loc["FKBP1A", "uniprot_accession"] == "P62942"
-    assert a.loc["SHARED", "mapping"] == "ambiguous" and a.loc["SHARED", "uniprot_accession"] is None
+    assert a.loc["SHARED", "mapping"] == "ambiguous" and pd.isna(a.loc["SHARED", "uniprot_accession"])
     assert a.loc["NOPE", "mapping"] == "unmapped"
     assert set(g["collection"]) == {"c2.cp", "c2.all"} and len(g) == 2 * 6
 
