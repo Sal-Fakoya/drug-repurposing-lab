@@ -8,6 +8,7 @@ dated July 2014. Gene sets are never edited by hand; the only rules are mechanic
     compound targets, so no drug could overlap with it, but it does shrink the set and universe.
 Every set gets a report row so the loss is visible.
 """
+import re
 from pathlib import Path
 
 from lab import chembl
@@ -56,6 +57,36 @@ def load_gene_sets(symbols: dict[str, set[str]], collection: str = "c2.cp",
         report.append({"set_name": name, "n_symbols": len(genes), "n_mapped": len(genes) - amb - unm,
                        "n_ambiguous": amb, "n_unmapped": unm})
     return sets, report
+
+
+# Pre-specified rule for mapping a hypothesis term to MSigDB v4.0 c2.cp gene sets, as recorded in
+# docs/cutoff-decision.md ("MSigDB v4.0 pin": every c2.cp set whose name contains the term's
+# keyword) before any lab run on real data. Do not edit: a change needs a new RULE_VERSION and a
+# new amendment to the decision record.
+RULE_VERSION = "c2cp-name-contains-v1"
+RULE_COLLECTION = "c2.cp"
+RULE_STOPWORDS = frozenset({"SIGNALING", "SIGNALLING", "SIGNAL", "PATHWAY", "PATHWAYS", "THE",
+                            "OF", "AND", "BY", "VIA", "IN"})
+
+
+def term_keyword(term: str) -> str:
+    """The term's keyword: upper-case; drop separators between a letter and a digit ("IL-6" -> IL6);
+    split on other non-alphanumerics; drop RULE_STOPWORDS; join the rest with "_" ("JAK-STAT" ->
+    JAK_STAT). "" when nothing is left."""
+    text = re.sub(r"([A-Z])[^A-Z0-9]+(?=[0-9])", r"\1", term.upper())
+    return "_".join(t for t in re.findall(r"[A-Z0-9]+", text) if t not in RULE_STOPWORDS)
+
+
+def match_term(term: str, set_names) -> list[str]:
+    """Gene sets whose name, without its source prefix, contains the term's keyword. Sorted.
+
+    No synonyms, no fuzzy matching, no manual additions: "interleukin 6" does not match IL6 sets.
+    A term with no keyword matches nothing.
+    """
+    keyword = term_keyword(term)
+    if not keyword:
+        return []
+    return sorted(name for name in set_names if keyword in name.split("_", 1)[-1])
 
 
 def load_from_snapshot(collection: str = "c2.cp") -> tuple[dict[str, set[str]], list[dict]]:
