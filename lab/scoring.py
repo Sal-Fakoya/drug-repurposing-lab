@@ -71,11 +71,20 @@ def pathway_enrichment(pool: list[dict], gene_set_ids: list[str], cutoff_year: i
 
 
 def literature_graph(pool: list[dict], gene_set_ids: list[str], cutoff_year: int,
-                     limit: int = 200, seed: int | None = None) -> list[dict]:
-    """Method B: co-mention strength between each drug and the hypothesis gene sets."""
+                     limit: int = 200, seed: int | None = None,
+                     include_hhv8: bool = True) -> list[dict]:
+    """Method B: co-mention strength between each drug and the hypothesis gene sets.
+
+    include_hhv8=False drops co-mentions from records with hhv8_status "positive" only
+    (HHV-8, KSHV, Kaposi or HIV present or causal; see lab/hhv8.py). Records that only negate
+    them ("HHV-8-negative", typical of idiopathic MCD) are kept. The real loader must count
+    co-mentions only from evidence whose hhv8_status is not "positive" in that case.
+    """
     _require_toy()
     _, comentions = toy_data.build()
-    scores = {p["drug_id"]: float(sum(comentions.get((p["drug_id"], gs), 0) for gs in gene_set_ids))
+    hhv8 = {} if include_hhv8 else toy_data.hhv8_positive_comentions()
+    scores = {p["drug_id"]: float(sum(comentions.get((p["drug_id"], gs), 0)
+                                      - hhv8.get((p["drug_id"], gs), 0) for gs in gene_set_ids))
               for p in pool}
     return _rank(scores, limit, seed)
 

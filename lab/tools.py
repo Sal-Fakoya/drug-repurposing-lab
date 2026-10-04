@@ -5,13 +5,15 @@ Handoffs go by id. Every tool returns small JSON-serializable dicts.
 import json
 import math
 import os
+import re
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
 import numpy as np
 
-from lab import CUTOFF_YEAR, MODE, ledger, scoring, toy_data
+from lab import CUTOFF_YEAR, MODE, hhv8, ledger, scoring, toy_data
 
 BUDGET_TOTAL = float(os.environ.get("LAB_BUDGET", "20"))
 AGENTS = {"literature", "insight", "planner", "runner", "analysis", "safety"}
@@ -21,6 +23,12 @@ TOOL_ONLY_KINDS = {"result", "verdict", "final_ranking", "approval", "experiment
 PLANNER_VISIBLE_KINDS = {"hypothesis", "experiment_spec", "verdict"}
 _rng = np.random.default_rng(int(os.environ.get("LAB_SEED", "0")))
 
+EUROPEPMC_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/search"
+EUROPEPMC_PAGE_SIZE = 100
+EUROPEPMC_MAX_RECORDS = 1000
+EUROPEPMC_RETRIES = 4
+EUROPEPMC_TIMEOUT = 60
+
 
 def _now() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -28,8 +36,56 @@ def _now() -> str:
 
 # ---------- literature ----------
 
-def search_literature(query: str, cutoff_year: int) -> dict:
-    """Search Europe PMC with a hard publication date filter. Returns evidence_ids."""
+def _europepmc_page(query: str, cursor: str) -> dict:
+    """One page of Europe PMC results. Retries timeouts, network errors and 5xx/429."""
+    params = urllib.parse.urlencode({
+        "query": query, "format": "json", "resultType": "core",
+        "pageSize": EUROPEPMC_PAGE_SIZE, "cursorMark": cursor})
+    request = urllib.request.Request(f"{EUROPEPMC_URL}?{params}",
+                                     headers={"User-Agent": "drug-repurposing-lab/0.4"})
+    for attempt in range(EUROPEPMC_RETRIES):
+        try:
+            with urllib.request.urlopen(request, timeout=EUROPEPMC_TIMEOUT) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as exc:
+            if exc.code < 500 and exc.code != 429:
+                raise RuntimeError(f"Europe PMC rejected the request: HTTP {exc.code}") from exc
+            error = exc
+        except (OSError, ValueError) as exc:  # URLError, timeouts, truncated JSON
+            error = exc
+        if attempt < EUROPEPMC_RETRIES - 1:
+            time.sleep(2 ** attempt)
+    raise RuntimeError(f"Europe PMC failed after {EUROPEPMC_RETRIES} attempts: {error}")
+
+
+def _store_europepmc_record(rec: dict, cutoff_year: int) -> str | None:
+    """Keep only title, abstract and first publication date (plus ids). None if out of range.
+
+    Citation counts, MeSH terms and text-mined annotations are computed today and would leak
+    post-cutoff knowledge, so they are never stored.
+    """
+    pub = rec.get("firstPublicationDate") or ""
+    if not re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", pub) or int(pub[:4]) >= int(cutoff_year):
+        return None  # undated, malformed, or on/after the cutoff: belt and braces on the filter
+    title = rec.get("title") or ""
+    abstract = rec.get("abstractText") or ""
+    status, terms = hhv8.classify(title, abstract)
+    return ledger.append("evidence_record", {
+        "source": "europepmc", "pmid": rec.get("pmid"), "pub_date": pub, "title": title,
+        "abstract": abstract, "snippet": abstract[:600], "entities": [],
+        "retrieved_at": _now(), "hhv8_status": status, "hhv8_terms": terms},
+        agent="literature")
+
+
+def search_literature(query: str, cutoff_year: int,
+                      max_records: int = EUROPEPMC_MAX_RECORDS) -> dict:
+    """Search Europe PMC with a hard publication date filter. Returns evidence_ids.
+
+    Real mode pages through every hit with cursorMark (up to max_records), keeps only title,
+    abstract and first publication date, and sets hhv8_status (positive, negated_only or none;
+    see lab/hhv8.py). Evidence ids are unique and in retrieval order; a PMID already in the
+    ledger returns its existing id.
+    """
     if cutoff_year is None or int(cutoff_year) > CUTOFF_YEAR:
         raise ValueError(f"cutoff_year must be set and at most {CUTOFF_YEAR}")
     if MODE == "toy":
@@ -43,29 +99,33 @@ def search_literature(query: str, cutoff_year: int) -> dict:
         ]
         ids = []
         for pmid, title, snippet, entities in samples:
+            status, terms = hhv8.classify(title, snippet)
             ids.append(ledger.append("evidence_record", {
                 "source": "toy", "pmid": pmid, "pub_date": "2012-01-01", "title": title,
-                "snippet": snippet, "entities": entities, "retrieved_at": _now()},
+                "abstract": snippet, "snippet": snippet, "entities": entities,
+                "retrieved_at": _now(), "hhv8_status": status, "hhv8_terms": terms},
                 agent="literature"))
         return {"evidence_ids": ids}
-    # Real mode. Not exercised in tests (no network in CI). Verify in H1 to H3.
     last_day = f"{int(cutoff_year) - 1}-12-31"  # cutoff_year is exclusive
     q = f"({query}) AND (FIRST_PDATE:[1900-01-01 TO {last_day}])"
-    params = urllib.parse.urlencode(
-        {"query": q, "format": "json", "resultType": "core", "pageSize": 25})
-    url = f"https://www.ebi.ac.uk/europepmc/webservices/rest/search?{params}"
-    with urllib.request.urlopen(url, timeout=30) as resp:
-        data = json.loads(resp.read())
-    ids = []
-    for rec in data.get("resultList", {}).get("result", []):
-        pub = rec.get("firstPublicationDate", "")
-        if not pub or int(pub[:4]) >= int(cutoff_year):  # belt and braces on the filter
-            continue
-        ids.append(ledger.append("evidence_record", {
-            "source": "europepmc", "pmid": rec.get("pmid"), "pub_date": pub,
-            "title": rec.get("title", ""), "snippet": (rec.get("abstractText") or "")[:600],
-            "entities": [], "retrieved_at": _now()}, agent="literature"))
-    return {"evidence_ids": ids}
+    ids: list[str] = []
+    cursor, retrieved = "*", 0
+    while retrieved < max_records:
+        page = _europepmc_page(q, cursor)
+        records = page.get("resultList", {}).get("result", [])
+        for rec in records[:max_records - retrieved]:
+            retrieved += 1
+            row_id = _store_europepmc_record(rec, int(cutoff_year))
+            if row_id is not None and row_id not in ids:
+                ids.append(row_id)
+        next_cursor = page.get("nextCursorMark")
+        if not records or not next_cursor or next_cursor == cursor:
+            break
+        cursor = next_cursor
+    counts = dict.fromkeys(hhv8.STATUSES, 0)
+    for i in ids:
+        counts[ledger.get(i)["hhv8_status"]] += 1
+    return {"evidence_ids": ids, "n_retrieved": retrieved, "hhv8_status_counts": counts}
 
 
 def read_evidence(evidence_id: str) -> dict:
@@ -218,7 +278,9 @@ def run_experiment(exp_id: str) -> dict:
         if spec["method"] == "A":
             ranked = scoring.pathway_enrichment(pool, gene_sets, CUTOFF_YEAR, seed=seed)
         else:
-            ranked = scoring.literature_graph(pool, gene_sets, CUTOFF_YEAR, seed=seed)
+            include_hhv8 = bool(spec["params"].get("include_hhv8", True))
+            ranked = scoring.literature_graph(pool, gene_sets, CUTOFF_YEAR, seed=seed,
+                                              include_hhv8=include_hhv8)
         res_id = ledger.append("result", {
             "exp_id": exp_id, "ranked_drugs": ranked, "cost": spec["expected_cost"],
             "seed": seed, "artifact_path": None}, agent="runner", parent_id=exp_id)

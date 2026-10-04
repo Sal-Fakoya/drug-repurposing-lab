@@ -220,10 +220,13 @@ def active_arms() -> list[dict]:
     if candidates:
         candidates.append((CONTROL_HYP_ID, [toy_data.NEGATIVE_CONTROL], True))
     arms = []
+    exclude_hhv8 = not lab.method_b_include_hhv8()
     for hyp_id, gene_set_ids, control in candidates:
         for method, cost in METHOD_COST.items():
             arm_id = f"{hyp_id}:{method}"
             params = {"gene_set_ids": gene_set_ids}
+            if method == "B" and exclude_hhv8:  # recorded in the spec, so results show it
+                params["include_hhv8"] = False
             s = stats.get(arm_id, {"n": 0, "mean_reward": 1.0})  # optimistic prior
             if s["n"] >= MAX_RUNS_PER_ARM or design_key(hyp_id, method, params) in done:
                 continue
