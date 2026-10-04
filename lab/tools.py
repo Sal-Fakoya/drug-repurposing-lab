@@ -136,8 +136,8 @@ def find_gene_set(term: str, cutoff_year: int) -> dict:
     """Resolve a pathway or process term to gene_set_ids.
 
     Real mode applies the pre-specified rule in lab.msigdb (RULE_VERSION, fixed in
-    docs/cutoff-decision.md): MSigDB v4.0 c2.cp sets whose name contains every token of the
-    term, from the hash-checked snapshot for cutoff_year. An empty list means no c2.cp set
+    docs/cutoff-decision.md): MSigDB v4.0 c2.cp sets whose name contains the term's keyword
+    (lab.msigdb.term_keyword), from the hash-checked snapshot for cutoff_year. An empty list means no c2.cp set
     matches, so the hypothesis is not testable by methods A and B.
     """
     if MODE == "toy":
